@@ -25,7 +25,7 @@ TEMPLATES = {
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-# CUMA 2 INI YANG BOLEH LANGSUNG HIJAU
+
 FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
 
 NO_RESULT = [
@@ -35,7 +35,6 @@ NO_RESULT = [
 "tidak ada yang cocok","hasil tidak ditemukan","maaf, tidak ada"
 ]
 
-# Ini jebakan yang bikin cnn & unismuh ngaur
 JEBAKAN_SEARCH = [
 "hasil pencarian untuk","search results for","search result for",
 "hasil cari","pencarian untuk","menampilkan hasil untuk"
@@ -51,39 +50,32 @@ def cek_valid(url, query, domain):
             low = raw.lower()
             qlow = query.lower().strip()
 
-            # 1. Kalau web bilang tidak ada hasil, MATI LANGSUNG
             for k in NO_RESULT:
                 if k in low:
                     return False
 
-            # 2. BERSIHKAN HTML DARI JEBAKAN
             clean = re.sub(r'<input[^>]*>', ' ', low)
             clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
             clean = re.sub(r'<meta[^>]*>', ' ', clean)
             clean = re.sub(r'<script.*?</script>', ' ', clean, flags=re.DOTALL)
             clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
 
-            # 3. HAPUS SEMUA FRASE JEBAKAN "HASIL PENCARIAN UNTUK: EVANITA MANULLANG"
-            # Ini penyebab utama cnn & unismuh jadi hijau padahal kosong
+            
             for j in JEBAKAN_SEARCH:
-                # hapus "hasil pencarian untuk: evanita manullang" dan "hasil pencarian untuk evanita manullang"
+                
                 clean = clean.replace(f"{j}: {qlow}", " ")
                 clean = clean.replace(f"{j} {qlow}", " ")
                 clean = clean.replace(f"{j}:", " ")
                 clean = clean.replace(j, " ")
 
-            # Hapus juga query yang masih nempel di dalam quotes pencarian
             clean = clean.replace(f'"{qlow}"', ' ')
             clean = clean.replace(f"'{qlow}'", ' ')
 
-            # 4. BARU CEK, APAKAH SETELAH SEMUA JEBAKAN DIHAPUS, NAMA MASIH ADA?
-            # Kalau tidak ada, berarti memang tidak ada berita/dosen nya
+            
             if qlow not in clean:
                 return False
 
-            # 5. EXTRA KETAT: harus ada minimal di dalam <a> atau <h2> <h3> <article>
-            # Kalau cuma di teks biasa, anggap tidak valid
-            # Cek apakah ada link judul yang mengandung nama
+            
             links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
             found_in_link = False
             for link_text in links:
@@ -91,10 +83,10 @@ def cek_valid(url, query, domain):
                     found_in_link = True
                     break
             
-            # Untuk berita dan kampus, wajib ada di judul link, bukan cuma di body
+            
             if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun']):
                 if not found_in_link:
-                    # cek juga di heading
+                    
                     headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
                     for h in headings:
                         if qlow in h.lower():
