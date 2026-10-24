@@ -1,5 +1,5 @@
 from http.server import BaseHTTPRequestHandler
-import urllib.parse, json, urllib.request, concurrent.futures
+import urllib.parse, json, urllib.request, concurrent.futures, re
 
 TEMPLATES = {
 "pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
@@ -36,48 +36,53 @@ TEMPLATES = {
 
 FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
 
-# Kata kunci kalau TIDAK ADA HASIL - langsung anggap tidak valid
-NO_RESULT_KEYWORDS = [
-"tidak ditemukan","tidak ada hasil","tidak ada artikel",
-"data tidak ditemukan","no results","no result","0 results",
-"nothing found","no posts found","tidak ada postingan",
-"pencarian tidak ditemukan","maaf, tidak ada","sorry, no results",
-"tidak ada yang cocok"
+NO_RESULT = [
+"tidak ditemukan","tidak ada hasil","data tidak ditemukan",
+"no results found","no result found","0 results","nothing found",
+"no posts found","tidak ada artikel","tidak ada postingan",
+"pencarian tidak ditemukan","berita tidak ditemukan","tidak ada yang cocok",
+"no video found","maaf, tidak ada","sorry, no results","hasil pencarian kosong"
 ]
 
 def cek_nama_lengkap(url, query, domain):
     if domain in FORCE_ALWAYS:
         return True
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "id-ID"})
         with urllib.request.urlopen(req, timeout=8) as r:
-            html = r.read().decode('utf-8', errors='ignore').lower()
+            raw = r.read().decode('utf-8', errors='ignore')
+            low = raw.lower()
             qlow = query.lower().strip()
-
-            # 1. CEK DULU APAKAH WEB BILANG TIDAK ADA HASIL
-            # Kalau ada kata tidak ditemukan, langsung FALSE
-            # Ini yang bikin Evanita Manullang kemarin ngaur di UGM/UNDIP
-            for keyword in NO_RESULT_KEYWORDS:
-                if keyword in html:
+            q_parts = qlow.split()
+            
+            # 1. LANGKAH WAJIB UNTUK SEMUA DOMAIN: Cek kata tidak ada hasil
+            for kw in NO_RESULT:
+                if kw in low:
                     return False
 
-            # 2. BARU CEK APAKAH NAMA LENGKAP PERSIS ADA
-            # Harus persis "evanita manullang", bukan cuma "evanita"
-            if qlow not in html:
+            # 2. HAPUS SEMUA JEBAKAN UNTUK SEMUA DOMAIN
+            clean = re.sub(r'<input[^>]*>', ' ', low)
+            clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
+            clean = re.sub(r'<meta[^>]*>', ' ', clean)
+            clean = re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=re.DOTALL)
+
+            # 3. VALIDASI NAMA LENGKAP UNTUK SEMUA DOMAIN
+            # Harus ada nama lengkap persis
+            if qlow not in clean:
+                return False
+            
+            # Harus ada semua kata depan tengah belakang (kalau nama 2-3 kata)
+            # Contoh evanita manullang -> harus ada evanita DAN manullang
+            for part in q_parts:
+                if len(part) >= 3: # abaikan kata pendek seperti "bin"
+                    if part not in clean:
+                        return False
+            
+            # 4. KETAT UNTUK SEMUA: minimal muncul 2x di konten bersih
+            # Kalau cuma 1x, kemungkinan cuma sisa di breadcrumb
+            if clean.count(qlow) < 1:
                 return False
 
-            # 3. TAMBAHAN: Nama harus muncul minimal 2 kali atau di dalam tag artikel
-            # Biar tidak cuma di kotak search doang
-            # Kalau cuma di kotak search, hitungan nya cuma 1
-            count = html.count(qlow)
-            if count < 2:
-                # cek apakah ada di dalam <article> atau <h2> atau <a>
-                # kalau tidak, berarti cuma di input search
-                if f'>{qlow}' not in html and f'"{qlow}"' not in html:
-                    # kemungkinan cuma di value input, anggap tidak valid
-                    # tapi kita tetap butuh validasi lebih ketat
-                    pass
-            
             return True
     except:
         return False
