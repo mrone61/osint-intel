@@ -1,68 +1,79 @@
 from http.server import BaseHTTPRequestHandler
-import json, re, random
-import urllib.request
+import json, re, urllib.request, urllib.parse
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            # Ambil username dari ?u=
-            path = self.path
-            m = re.search(r'u=([^&]+)', path)
+            m = re.search(r'u=([^&]+)', self.path)
             if not m:
-                self.send_json({"error": "username required ?u=username"}, 400)
+                self.send_json({"error": "need ?u=username"}, 400)
                 return
-            username = m.group(1).strip().lstrip('@')
-
-            # List User-Agent random biar gak ke-detect bot
-            agents = [
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-                "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-                "Instagram 327.0.0.0.0 Android (34/14; 560dpi; 1440x3088; samsung; SM-S928B; dm3q; qcom; en_US; 559035960)"
-            ]
-
-            # Coba endpoint 1: web_profile_info (paling stabil)
-            url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
-            req = urllib.request.Request(url, headers={
-                "User-Agent": random.choice(agents),
-                "X-IG-App-ID": "936619743392459",
-                "Accept": "*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": f"https://www.instagram.com/{username}/",
-            })
+            username = urllib.parse.unquote(m.group(1)).strip().lstrip('@').lower()
             
-            try:
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    data = json.loads(r.read().decode('utf-8'))
-                    user = data['data']['user']
-            except:
-                # Fallback endpoint 2
-                url2 = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
-                req2 = urllib.request.Request(url2, headers={
-                    "User-Agent": random.choice(agents),
-                    "X-IG-App-ID": "936619743392459",
-                })
-                with urllib.request.urlopen(req2, timeout=10) as r2:
-                    data = json.loads(r2.read().decode('utf-8'))
-                    user = data['data']['user']
-
-            result = {
-                "username": user.get('username'),
-                "full_name": user.get('full_name'),
-                "bio": user.get('biography'),
-                "followers": user.get('follower_count'),
-                "following": user.get('following_count'),
-                "posts": user.get('media_count'),
-                "is_private": user.get('is_private'),
-                "is_verified": user.get('is_verified'),
-                "profile_pic": user.get('profile_pic_url_hd') or user.get('profile_pic_url'),
-                "external_url": user.get('external_url'),
-                "category": user.get('category_name'),
+            # Ambil halaman HTML publik, bukan API
+            url = f"https://www.instagram.com/{username}/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
+                "Referer": "https://www.instagram.com/",
+                "X-Requested-With": "XMLHttpRequest",
             }
+            req = urllib.request.Request(url, headers=headers)
             
-            self.send_json(result)
+            html = ""
+            with urllib.request.urlopen(req, timeout=15) as r:
+                html = r.read().decode('utf-8', errors='ignore')
+
+            # Coba cari data JSON yang nempel di HTML
+            # Instagram simpan data di window._sharedData atau script type="application/ld+json"
+            user_data = None
+            
+            # Method 1: cari profilePage_xxxx
+            match = re.search(r'"profilePage_[0-9]+":\{"data":\{"user":(.*?),"__typename"', html)
+            if not match:
+                match = re.search(r'"user":\{"username":"%s".*?\}\}' % re.escape(username), html, re.DOTALL)
+            
+            if match:
+                try:
+                    # ambil og tags sebagai fallback paling aman
+                    bio = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                    pic = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+                    title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                    
+                    # parsing followers dari description: "1M Followers, 500 Following, 100 Posts"
+                    followers = following = posts = 0
+                    full_name = username
+                    if title:
+                        full_name = title.group(1).split('•')[0].split('(')[0].strip()
+                    
+                    desc = bio.group(1) if bio else ""
+                    # desc contoh: "1,234 Followers, 567 Following, 89 Posts - See Instagram..."
+                    nums = re.findall(r'([\d,.KM]+)\s+Followers.*?([\d,.KM]+)\s+Following.*?([\d,.KM]+)\s+Posts', desc)
+                    if nums:
+                        followers, following, posts = nums[0]
+
+                    result = {
+                        "username": username,
+                        "full_name": full_name,
+                        "bio": desc,
+                        "followers": followers,
+                        "following": following,
+                        "posts": posts,
+                        "profile_pic": pic.group(1) if pic else "",
+                        "source": "html-meta",
+                        "note": "Data dari HTML publik karena API IG lagi limit (429)"
+                    }
+                    self.send_json(result)
+                    return
+                except Exception as e2:
+                    pass
+
+            # Kalau sampai sini masih gagal, kasih error yang jelas
+            self.send_json({"error": f"Masih ke-block 429, IG lagi ketat. HTML length: {len(html)}", "hint": "Coba test username 'instagram' dulu"}, 500)
 
         except Exception as e:
-            self.send_json({"error": f"IG Block / Username tidak ditemukan: {str(e)}", "hint": "Coba username lain atau tunggu 2 menit"}, 500)
+            self.send_json({"error": str(e), "hint": "Vercel IP di-limit IG. Tunggu 10 menit atau coba username lain"}, 500)
 
     def send_json(self, obj, code=200):
         self.send_response(code)
