@@ -1,70 +1,46 @@
 <!DOCTYPE html>
 <html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OSINT INTEL - Open Source Search</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSINT INTEL SEARCH</title>
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#0a0a0a] text-white min-h-screen p-4">
-<div class="max-w-3xl mx-auto">
-  <h1 class="text-2xl font-bold text-center mt-6 mb-2">OSINT INTEL</h1>
-  <p class="text-center text-zinc-400 text-sm mb-6">Papua Threat Intelligence</p>
-    <p class="text-center text-zinc-400 text-sm mb-6">Author by Mr.One </p>
+<div class="max-w-3xl mx-auto text-center">
+  <h1 class="text-3xl font-black mt-8">OSINT INTEL</h1>
+  <p class="text-zinc-500 text-xs tracking-[0.3em] mt-1">OPEN SOURCE INTELLINGECE</p>
+  <p class="text-zinc-600 text-[10px] mt-2">Author by Mr.One</p>
   
-  <div class="flex gap-2 mb-8">
-    <input id="q" type="text" placeholder="Ketik nama lengkap, mis: Jaden Smith" 
-      class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white">
+  <div class="flex gap-2 mt-8 text-left">
+    <input id="q" value="Prabowo Subianto" type="text" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 outline-none">
     <button onclick="search()" class="bg-white text-black font-bold px-6 rounded-lg">CARI</button>
   </div>
-
-  <div id="status" class="text-center text-zinc-500 text-sm mb-4"></div>
-  <div id="results" class="grid gap-3"></div>
+  <div id="status" class="text-zinc-500 text-sm mt-4"></div>
+  <div id="results" class="grid gap-3 mt-4 text-left"></div>
 </div>
-
 <script>
 async function search(){
   const query = document.getElementById('q').value.trim();
-  if(!query){ alert('Isi nama dulu bro'); return; }
-  const status = document.getElementById('status');
-  const results = document.getElementById('results');
-  status.textContent = `Mencari jejak publik untuk "${query}"...`;
-  results.innerHTML = '';
-
+  if(!query) return;
+  document.getElementById('status').textContent = 'Mencari '+query+'...';
+  document.getElementById('results').innerHTML = '';
   try{
-    const res = await fetch(`/api?q=${encodeURIComponent(query)}`);
-    const data = await res.json();
+    // PAKAI /api/index BIAR PASTI KENA PYTHON
+    const res = await fetch(`/api/index?q=${encodeURIComponent(query)}`);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e){ throw new Error('API masih return HTML, cek vercel.json & api/index.py sudah ke-deploy belum. Response: '+text.slice(0,100)); }
     
-    if(data.error){
-      status.textContent = data.error;
-      return;
-    }
-    
-    status.textContent = `Ditemukan ${data.total} sumber terbuka untuk "${data.query}"`;
-    
+    document.getElementById('status').textContent = `Ditemukan ${data.total} sumber untuk "${data.query}"`;
     data.results.forEach(r => {
-      const card = document.createElement('a');
-      card.href = r.url;
-      card.target = '_blank';
-      card.className = 'block bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg p-4 transition';
-      card.innerHTML = `
-        <div class="flex justify-between items-start gap-2">
-          <div>
-            <div class="font-semibold text-sm mb-1">${r.title}</div>
-            <div class="text-xs text-zinc-500 break-all">${r.url}</div>
-          </div>
-          <span class="text-[10px] bg-zinc-800 px-2 py-1 rounded uppercase">${r.source}</span>
-        </div>
-      `;
-      results.appendChild(card);
+      document.getElementById('results').innerHTML += `
+        <a href="${r.url}" target="_blank" class="block bg-zinc-900 border border-zinc-800 hover:border-white rounded-lg p-4">
+          <div class="flex justify-between"><span class="font-bold text-sm">${r.title}</span><span class="text-[10px] bg-zinc-800 px-2 py-1 rounded">${r.source}</span></div>
+          <div class="text-xs text-zinc-500 break-all mt-1">${r.url}</div>
+        </a>`;
     });
-
-  }catch(e){
-    status.textContent = 'Gagal fetch API: ' + e.message;
-  }
+  }catch(e){ document.getElementById('status').textContent = 'Error: '+e.message; }
 }
-
-document.getElementById('q').addEventListener('keydown', e => { if(e.key==='Enter') search(); });
+window.onload = search;
 </script>
 </body>
 </html>
