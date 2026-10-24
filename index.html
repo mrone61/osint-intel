@@ -98,7 +98,7 @@ async function doSearch(){
   document.getElementById('results').innerHTML = '<div class="col-span-2 text-center py-10 text-zinc-500 text-xs animate-pulse">MEMVALIDASI RATUSAN URL... INI BUTUH 8-12 DETIK</div>';
   
   try{
-    const res = await fetch(`/api/index?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api?q=${encodeURIComponent(q)}`);
     const data = await res.json();
     allData = data.results || [];
     shown = 0;
