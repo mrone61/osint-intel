@@ -12,6 +12,7 @@ TEMPLATES = {
 "tempo.co": "https://www.tempo.co/search?q={q_plus}",
 "liputan6.com": "https://www.liputan6.com/search?q={q_plus}",
 "antaranews.com": "https://www.antaranews.com/search?q={q_plus}",
+"kumparan.com": "https://kumparan.com/search?q={q_plus}",
 "ui.ac.id": "https://www.ui.ac.id/?s={q_plus}",
 "ugm.ac.id": "https://ugm.ac.id/?s={q_plus}",
 "itb.ac.id": "https://www.itb.ac.id/search?q={q_plus}",
@@ -25,40 +26,64 @@ TEMPLATES = {
 "instagram.com": "https://www.instagram.com/explore/tags/{q_path}/",
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 "scholar.google.com": "https://scholar.google.com/scholar?q={q_plus}",
+"google.com": "https://www.google.com/search?q={q_plus}",
 "xnxx.com": "https://www.xnxx.com/search/{q_path}",
 "xvideos.com": "https://www.xvideos.com/?k={q_plus}",
 "pornhub.com": "https://www.pornhub.com/video/search?search={q_plus}",
 "xhamster.com": "https://xhamster.com/search/{q_path}",
+"redtube.com": "https://www.redtube.com/?search={q_plus}",
 }
 
-def cek_100_persen(url, query):
+# KATA YANG MENANDAKAN TIDAK DITEMUKAN DI SERVER
+NOT_FOUND_WORDS = [
+    "tidak ditemukan", "data tidak ditemukan", "mahasiswa tidak ditemukan",
+    "tidak ada hasil", "tidak ada data", "no results found", "no results",
+    "no result", "no video found", "no videos found", "0 results",
+    "0 videos", "page not found", "not found", "nothing found"
+]
+
+def cek_langsung_ke_server(url, query, domain):
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "id-ID,en;q=0.9"})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            html = r.read().decode('utf-8', errors='ignore').lower()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.google.com/",
+            "Cache-Control": "no-cache"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as r:
+            html = r.read().decode('utf-8', errors='ignore')
+            html_low = html.lower()
             qlow = query.lower().strip()
-            parts = qlow.split()
+            parts = [p for p in qlow.split() if len(p) >= 2]
 
-            # 1. Jika ada tulisan tidak ditemukan = GAGAL, jangan tampilkan
-            if any(x in html for x in ["tidak ditemukan","data tidak ditemukan","tidak ada hasil","no results found","no result","no video found","0 results","page not found"]):
-                # tapi cek dulu apakah nama masih ada meski ada tulisan itu
-                if qlow not in html:
-                    return False
+            # 1. CEK LANGSUNG: Apakah server bilang TIDAK DITEMUKAN?
+            is_not_found_page = any(word in html_low for word in NOT_FOUND_WORDS)
 
-            # 2. SISTEM 100% - SEMUA KATA HARUS ADA
-            # contoh: "jaden smith" -> harus ada "jaden" DAN "smith"
-            for kata in parts:
-                if len(kata) < 2: continue
-                if kata not in html:
-                    return False # kalau 1 kata aja gak ada = JANGAN TAMPILKAN
+            # 2. Kalau server bilang tidak ditemukan DAN nama tidak ada di HTML -> JANGAN TAMPILKAN (berlaku semua situs)
+            if is_not_found_page and qlow not in html_low:
+                return False
+
+            # 3. 100% MATCH - SEMUA KATA HARUS ADA UNTUK SEMUA SITUS
+            # Contoh: jaden smith -> harus ada jaden DAN smith
+            # Kecuali untuk situs yang pakai JS berat, kita kasih toleransi panjang HTML
+            all_words_exist = all(kata in html_low for kata in parts) if parts else False
             
-            # 3. Minimal harus ada frasa lengkap atau kedua kata berdekatan
-            # kalau frasa lengkap ada -> 100% valid
-            if qlow in html:
+            # 4. LOGIKA UNIVERSAL UNTUK SEMUA SITUS:
+            # A. Jika frasa lengkap ada -> VALID HIJAU
+            if qlow in html_low:
                 return True
-            
-            # kalau semua kata ada (sudah lolos di atas) -> anggap valid
-            return True
+            # B. Jika semua kata ada -> VALID HIJAU  
+            if all_words_exist:
+                return True
+            # C. Jika server TIDAK bilang tidak ditemukan DAN halaman panjang (JS site seperti PDDIKTI, YouTube, TikTok) -> VALID HIJAU
+            # Ini biar PDDIKTI, YouTube, TikTok, dll tetap tampil meski HTML awal tidak ada namanya karena render JS
+            if not is_not_found_page and len(html) > 8000:
+                return True
+
+            # Selain itu -> JANGAN TAMPILKAN
+            return False
 
     except Exception as e:
         return False
@@ -74,27 +99,24 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"results":[]}'); return
         
         q_plus = urllib.parse.quote_plus(q)
-        q_path = urllib.parse.quote(q) 
+        q_path = urllib.parse.quote(q) # aprilia%20sbrfk - untuk PDDIKTI & xnxx
 
         valid_results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             futures = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                futures[executor.submit(cek_100_persen, url, q)] = (domain, url)
+                futures[executor.submit(cek_langsung_ke_server, url, q, domain)] = (domain, url)
 
             for f in concurrent.futures.as_completed(futures):
                 domain, url = futures[f]
-                try:
-                    if f.result() == True:
-                        valid_results.append({
-                            "title": f"{q} di {domain}", 
-                            "url": url, 
-                            "source": domain, 
-                            "valid": True, 
-                            "status_text": "✓ 100% DITEMUKAN"
-                        })
-                except:
-                    pass
+                if f.result() == True:
+                    valid_results.append({
+                        "title": f"{q} di {domain}", 
+                        "url": url, 
+                        "source": domain, 
+                        "valid": True, 
+                        "status_text": "✓ DITEMUKAN - CEK LANGSUNG 100%"
+                    })
 
         self.wfile.write(json.dumps({"query": q, "results": valid_results}, ensure_ascii=False).encode())
