@@ -1,62 +1,57 @@
 from http.server import BaseHTTPRequestHandler
-import urllib.parse, urllib.request, re, json
-
-def search_duckduckgo(query):
-    try:
-        q = urllib.parse.quote_plus(query)
-        url = f"https://html.duckduckgo.com/html/?q={q}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as r:
-            html = r.read().decode('utf-8', errors='ignore')
-        
-        results = []
-        # ambil link hasil
-        for m in re.finditer(r'<a rel="nofollow" class="result__url" href="([^"]+)".*?>(.*?)</a>.*?<a class="result__a" href="[^"]+">(.*?)</a>', html, re.S):
-            raw_url = m.group(1)
-            title = re.sub('<[^>]+>', '', m.group(3)).strip()
-            # decode duckduckgo redirect
-            if "duckduckgo.com/l/?" in raw_url:
-                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(raw_url).query)
-                if 'uddg' in parsed:
-                    raw_url = parsed['uddg'][0]
-            if raw_url.startswith("http"):
-                results.append({"title": title[:120], "url": raw_url, "source": "duckduckgo"})
-            if len(results) >= 10:
-                break
-        return results
-    except Exception as e:
-        return [{"title": f"Error search: {e}", "url": "", "source": "error"}]
+import urllib.parse, json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        qs = urllib.parse.parse_qs(parsed.query)
-        query = (qs.get('q') or qs.get('u') or qs.get('name') or [None])[0]
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            query = (qs.get('q') or qs.get('u') or qs.get('name') or [None])[0]
 
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
 
-        if not query:
-            self.wfile.write(json.dumps({"error": "need ?q=nama atau ?u=nama", "contoh": "/api?q=Joko Widodo"}).encode())
-            return
+            if not query:
+                self.wfile.write(json.dumps({"error": "need ?q=nama", "contoh": "/api/index?q=Prabowo Subianto"}).encode())
+                return
 
-        query = query.strip()
-        results = search_duckduckgo(query)
+            q = query.strip()
+            q_enc = urllib.parse.quote_plus(q)
+            q_enc_plus = q.replace(' ', '+')
 
-        # tambahkan sumber terbuka langsung
-        extra = [
-            {"title": f"Wikipedia - {query}", "url": f"https://en.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote_plus(query)}", "source": "wikipedia"},
-            {"title": f"Google News - {query}", "url": f"https://news.google.com/search?q={urllib.parse.quote_plus(query)}", "source": "google_news"},
-            {"title": f"Twitter/X - {query}", "url": f"https://twitter.com/search?q={urllib.parse.quote_plus(query)}", "source": "twitter"},
-        ]
+            # SEMUA SUMBER TERBUKA - kita kasih link search langsung, anti blokir
+            results = [
+                {"title": f"Google - {q}", "url": f"https://www.google.com/search?q={q_enc}", "source": "google"},
+                {"title": f"Google News - {q}", "url": f"https://news.google.com/search?q={q_enc}", "source": "gnews"},
+                {"title": f"Wikipedia - {q}", "url": f"https://id.wikipedia.org/w/index.php?search={q_enc}", "source": "wikipedia"},
+                {"title": f"Twitter / X - {q}", "url": f"https://x.com/search?q={q_enc}", "source": "twitter"},
+                {"title": f"YouTube - {q}", "url": f"https://www.youtube.com/results?search_query={q_enc}", "source": "youtube"},
+                {"title": f"TikTok - {q}", "url": f"https://www.tiktok.com/search?q={q_enc}", "source": "tiktok"},
+                {"title": f"Instagram - {q}", "url": f"https://www.google.com/search?q=site%3Ainstagram.com+{q_enc}", "source": "instagram"},
+                {"title": f"Facebook - {q}", "url": f"https://www.facebook.com/search/top/?q={q_enc}", "source": "facebook"},
+                {"title": f"Detik.com - {q}", "url": f"https://www.detik.com/search/searchall?query={q_enc}", "source": "detik"},
+                {"title": f"Kompas.com - {q}", "url": f"https://search.kompas.com/search?q={q_enc}", "source": "kompas"},
+                {"title": f"CNN Indonesia - {q}", "url": f"https://www.cnnindonesia.com/search/?query={q_enc}", "source": "cnn"},
+                {"title": f"PDDikti - {q}", "url": f"https://pddikti.kemdikbud.go.id/search/{q_enc}", "source": "pddikti"},
+                {"title": f"LinkedIn - {q}", "url": f"https://www.linkedin.com/search/results/all/?keywords={q_enc}", "source": "linkedin"},
+                {"title": f"GitHub - {q}", "url": f"https://github.com/search?q={q_enc}", "source": "github"},
+                {"title": f"Google Maps - {q}", "url": f"https://www.google.com/maps/search/{q_enc}", "source": "maps"},
+            ]
 
-        data = {
-            "query": query,
-            "total": len(results) + len(extra),
-            "results": extra + results,
-            "note": "LEGAL PUBLIC OSINT - hanya link publik, tidak simpan data pribadi"
-        }
-        self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode())
+            data = {
+                "query": q,
+                "total": len(results),
+                "results": results,
+                "note": "PAPUA THREAT INTELLIGENCE - LEGAL PUBLIC OSINT"
+            }
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+
+        except Exception as e:
+            # INI PENTING: kalau error pun tetap balikin JSON, bukan HTML
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e), "query": ""}).encode())
