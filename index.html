@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSINT INTEL - Instagram Intel Tool</title>
+<style>
+body{background:#080808;color:#e0e0e0;font-family:'Courier New',monospace;margin:0;padding:20px}
+.header{text-align:center;border-bottom:1px solid #222;padding-bottom:20px;margin-bottom:20px}
+.header h1{letter-spacing:4px;margin:0}
+.header p{color:#666;font-size:12px}
+.box{max-width:800px;margin:auto;background:#111;border:1px solid #222;border-radius:14px;padding:20px}
+input{width:65%;padding:14px;background:#000;color:#0f0;border:1px solid #333;border-radius:8px;outline:none}
+button{width:30%;padding:14px;background:#0f0;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer}
+#result{margin-top:20px;display:none}
+.post{border:1px solid #222;padding:12px;border-radius:10px;margin-top:12px;background:#0a0a0a}
+a{color:#0f0;text-decoration:none}
+.badge{display:inline-block;background:#0f0;color:#000;padding:2px 8px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>OSINT INTEL</h1>
+<p>INDONESIAN THREAT INTELLIGENCE // LEGAL PUBLIC OSINT</p>
+</div>
+
+<div class="box">
+<div style="display:flex;gap:10px">
+<input id="username" placeholder="Target username: mr_one61">
+<button onclick="scan()">SCAN TARGET</button>
+</div>
+<div id="result"></div>
+</div>
+
+<script>
+// GANTI INI DENGAN URL VERCEL LU
+const BACKEND = "https://URL-VERCEL-LU.vercel.app/api/ig";
+
+async function scan(){
+  const u = document.getElementById('username').value.trim();
+  if(!u) return alert('Isi username bro!');
+  const box = document.getElementById('result');
+  box.style.display='block';
+  box.innerHTML = '⏳ Scanning @'+u+' ...';
+
+  try{
+    const r = await fetch(`${BACKEND}?u=${u}`);
+    const d = await r.json();
+    if(d.error) throw d.error;
+
+    let html = `
+      <h3>@${d.username} <span class="badge">${d.is_private ? 'PRIVATE' : 'PUBLIC'}</span></h3>
+      <p>Nama: ${d.nama}<br>Bio: ${d.bio}<br>Followers: ${d.followers}</p>
+      <h4>📁 POST TERBARU (Metadata)</h4>
+    `;
+    d.posts.forEach(p=>{
+      html+=`<div class="post">
+      📅 <b>Tanggal Upload:</b> ${p.tanggal}<br>
+      📍 <b>Lokasi Tag:</b> ${p.lokasi}<br>
+      📝 <b>Caption:</b> ${p.caption}<br>
+      🔗 <a href="${p.link}" target="_blank">${p.link}</a>
+      </div>`;
+    });
+    box.innerHTML = html;
+  }catch(e){
+    box.innerHTML = '❌ Gagal: '+e+'<br><br>Pastikan URL Backend di script sudah lu ganti dengan URL Vercel asli.';
+  }
+}
+</script>
+</body>
+  </html>
