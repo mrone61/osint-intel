@@ -22,25 +22,17 @@ TEMPLATES = {
 "undip.ac.id": "https://www.undip.ac.id/?s={q_plus}",
 "unair.ac.id": "https://www.unair.ac.id/?s={q_plus}",
 "unud.ac.id": "https://www.unud.ac.id/?s={q_plus}",
-"unsyiah.ac.id": "https://unsyiah.ac.id/?s={q_plus}",
 "unsri.ac.id": "https://www.unsri.ac.id/?s={q_plus}",
 "unila.ac.id": "https://www.unila.ac.id/?s={q_plus}",
-"unand.ac.id": "https://www.unand.ac.id/?s={q_plus}",
 "ub.ac.id": "https://www.ub.ac.id/?s={q_plus}",
 "uns.ac.id": "https://uns.ac.id/?s={q_plus}",
-"unnes.ac.id": "https://unnes.ac.id/?s={q_plus}",
-"uny.ac.id": "https://www.uny.ac.id/?s={q_plus}",
 "uin-alauddin.ac.id": "https://uin-alauddin.ac.id/?s={q_plus}",
-"telkomuniversity.ac.id": "https://telkomuniversity.ac.id/?s={q_plus}",
-"binus.ac.id": "https://binus.ac.id/?s={q_plus}",
-"gunadarma.ac.id": "https://www.gunadarma.ac.id/?s={q_plus}",
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
 "cnnindonesia.com": "https://www.cnnindonesia.com/search?query={q_plus}",
 "tribunnews.com": "https://www.tribunnews.com/search?q={q_plus}",
 "tempo.co": "https://www.tempo.co/search?q={q_plus}",
 "liputan6.com": "https://www.liputan6.com/search?q={q_plus}",
-"antaranews.com": "https://www.antaranews.com/search?q={q_plus}",
 "youtube.com": "https://www.youtube.com/results?search_query={q_plus}",
 "facebook.com": "https://www.facebook.com/search/top/?q={q_plus}",
 "x.com": "https://x.com/search?q={q_plus}",
@@ -53,26 +45,25 @@ TEMPLATES = {
 "xhamster.com": "https://xhamster.com/search/{q_path}",
 }
 
-def cek_bener(url, query, domain):
-    # === PDDIKTI & SEMUA KAMPUS SELALU TAMPIL - INI YANG AWAL BERHASIL ===
-    if "pddikti" in domain or "ac.id" in domain or "sinta" in domain or "garuda" in domain:
-        return True
+FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "sinta.kemdiktisaintek.go.id", "garuda.kemdikbud.go.id"]
 
+def cek_valid(url, query, domain):
+    if domain in FORCE_ALWAYS:
+        return True
     try:
         headers = {"User-Agent": "Mozilla/5.0", "Accept-Language": "id-ID,en;q=0.8"}
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=6) as r:
-            html = r.read().decode('utf-8', errors='ignore')
-            low = html.lower()
+        with urllib.request.urlopen(req, timeout=7) as r:
+            html = r.read().decode('utf-8', errors='ignore').lower()
             qlow = query.lower()
-
-            if any(x in low for x in ["tidak ditemukan","tidak ada hasil","no results","no video found","0 results"]):
-                if qlow not in low:
-                    return False
-            
             parts = [p for p in qlow.split() if len(p)>=2]
-            if qlow in low: return True
-            if parts and all(p in low for p in parts): return True
+            if any(x in html for x in ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results","no video found","0 results","no videos found"]):
+                if qlow not in html:
+                    return False
+            if qlow in html:
+                return True
+            if parts and all(p in html for p in parts):
+                return True
             return False
     except:
         return False
@@ -86,19 +77,16 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         if not q:
             self.wfile.write(b'{"results":[]}'); return
-        
         q_plus = urllib.parse.quote_plus(q)
         q_path = urllib.parse.quote(q)
-
         valid = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as ex:
             futs = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                futs[ex.submit(cek_bener, url, q, domain)] = (domain, url)
+                futs[ex.submit(cek_valid, url, q, domain)] = (domain, url)
             for f in concurrent.futures.as_completed(futs):
                 domain, url = futs[f]
                 if f.result():
                     valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
-
         self.wfile.write(json.dumps({"query": q, "results": valid}, ensure_ascii=False).encode())
