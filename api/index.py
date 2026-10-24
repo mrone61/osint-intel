@@ -1,75 +1,62 @@
 from http.server import BaseHTTPRequestHandler
-import json, re, urllib.request, urllib.parse
+import urllib.parse, urllib.request, re, json
+
+def search_duckduckgo(query):
+    try:
+        q = urllib.parse.quote_plus(query)
+        url = f"https://html.duckduckgo.com/html/?q={q}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            html = r.read().decode('utf-8', errors='ignore')
+        
+        results = []
+        # ambil link hasil
+        for m in re.finditer(r'<a rel="nofollow" class="result__url" href="([^"]+)".*?>(.*?)</a>.*?<a class="result__a" href="[^"]+">(.*?)</a>', html, re.S):
+            raw_url = m.group(1)
+            title = re.sub('<[^>]+>', '', m.group(3)).strip()
+            # decode duckduckgo redirect
+            if "duckduckgo.com/l/?" in raw_url:
+                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(raw_url).query)
+                if 'uddg' in parsed:
+                    raw_url = parsed['uddg'][0]
+            if raw_url.startswith("http"):
+                results.append({"title": title[:120], "url": raw_url, "source": "duckduckgo"})
+            if len(results) >= 10:
+                break
+        return results
+    except Exception as e:
+        return [{"title": f"Error search: {e}", "url": "", "source": "error"}]
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        try:
-            m = re.search(r'u=([^&]+)', self.path)
-            if not m:
-                self.send_json({"error": "need ?u=username"}, 400); return
-            username = urllib.parse.unquote(m.group(1)).strip().lstrip('@')
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        query = (qs.get('q') or qs.get('u') or qs.get('name') or [None])[0]
 
-            url = f"https://www.instagram.com/{username}/"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html",
-            }
-            req = urllib.request.Request(url, headers=headers)
-            html = urllib.request.urlopen(req, timeout=15).read().decode('utf-8', errors='ignore')
-
-            # AMBIL DARI OG TAGS - INI PALING STABIL
-            title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
-            desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
-            img = re.search(r'<meta property="og:image" content="([^"]+)"', html)
-
-            full_name = username
-            followers = following = posts = "-"
-            bio = ""
-
-            if title:
-                # title contoh: "mr_one61 (@mr_one61) • Instagram photos and videos"
-                full_name = title.group(1).split('(')[0].split('•')[0].strip()
-
-            if desc:
-                bio = desc.group(1)
-                # bio contoh: "2,234 Followers, 1,234 Following, 56 Posts - See..."
-                f = re.search(r'([\d,\.KM]+)\s+Followers', bio)
-                fg = re.search(r'([\d,\.KM]+)\s+Following', bio)
-                p = re.search(r'([\d,\.KM]+)\s+Posts', bio)
-                if f: followers = f.group(1)
-                if fg: following = fg.group(1)
-                if p: posts = p.group(1)
-
-            if not title and not desc:
-                self.send_json({"error": f"IG tidak kembalikan data untuk @{username}", "html_snippet": html[:500]}, 500)
-                return
-
-            result = {
-                "username": username,
-                "full_name": full_name,
-                "bio": bio,
-                "followers": followers,
-                "following": following,
-                "posts": posts,
-                "profile_pic": img.group(1) if img else "",
-                "source": "og-tags",
-                "status": "LIVE"
-            }
-            self.send_json(result)
-
-        except Exception as e:
-            self.send_json({"error": str(e)}, 500)
-
-    def send_json(self, obj, code=200):
-        self.send_response(code)
+        self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        self.wfile.write(json.dumps(obj).encode('utf-8'))
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
+
+        if not query:
+            self.wfile.write(json.dumps({"error": "need ?q=nama atau ?u=nama", "contoh": "/api?q=Joko Widodo"}).encode())
+            return
+
+        query = query.strip()
+        results = search_duckduckgo(query)
+
+        # tambahkan sumber terbuka langsung
+        extra = [
+            {"title": f"Wikipedia - {query}", "url": f"https://en.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote_plus(query)}", "source": "wikipedia"},
+            {"title": f"Google News - {query}", "url": f"https://news.google.com/search?q={urllib.parse.quote_plus(query)}", "source": "google_news"},
+            {"title": f"Twitter/X - {query}", "url": f"https://twitter.com/search?q={urllib.parse.quote_plus(query)}", "source": "twitter"},
+        ]
+
+        data = {
+            "query": query,
+            "total": len(results) + len(extra),
+            "results": extra + results,
+            "note": "LEGAL PUBLIC OSINT - hanya link publik, tidak simpan data pribadi"
+        }
+        self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode())
