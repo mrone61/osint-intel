@@ -12,7 +12,6 @@ TEMPLATES = {
 "tempo.co": "https://www.tempo.co/search?q={q_plus}",
 "liputan6.com": "https://www.liputan6.com/search?q={q_plus}",
 "antaranews.com": "https://www.antaranews.com/search?q={q_plus}",
-"kumparan.com": "https://kumparan.com/search?q={q_plus}",
 "ui.ac.id": "https://www.ui.ac.id/?s={q_plus}",
 "ugm.ac.id": "https://ugm.ac.id/?s={q_plus}",
 "itb.ac.id": "https://www.itb.ac.id/search?q={q_plus}",
@@ -23,69 +22,62 @@ TEMPLATES = {
 "facebook.com": "https://www.facebook.com/search/top/?q={q_plus}",
 "x.com": "https://x.com/search?q={q_plus}",
 "tiktok.com": "https://www.tiktok.com/search?q={q_plus}",
-"instagram.com": "https://www.instagram.com/explore/tags/{q_path}/",
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 "scholar.google.com": "https://scholar.google.com/scholar?q={q_plus}",
-"google.com": "https://www.google.com/search?q={q_plus}",
 "xnxx.com": "https://www.xnxx.com/search/{q_path}",
 "xvideos.com": "https://www.xvideos.com/?k={q_plus}",
 "pornhub.com": "https://www.pornhub.com/video/search?search={q_plus}",
 "xhamster.com": "https://xhamster.com/search/{q_path}",
-"redtube.com": "https://www.redtube.com/?search={q_plus}",
 }
 
-# KATA YANG MENANDAKAN TIDAK DITEMUKAN DI SERVER
-NOT_FOUND_WORDS = [
-    "tidak ditemukan", "data tidak ditemukan", "mahasiswa tidak ditemukan",
-    "tidak ada hasil", "tidak ada data", "no results found", "no results",
-    "no result", "no video found", "no videos found", "0 results",
-    "0 videos", "page not found", "not found", "nothing found"
-]
-
-def cek_langsung_ke_server(url, query, domain):
+def cek_bener(url, query, domain):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://www.google.com/",
-            "Cache-Control": "no-cache"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
         }
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=8) as r:
             html = r.read().decode('utf-8', errors='ignore')
             html_low = html.lower()
-            qlow = query.lower().strip()
-            parts = [p for p in qlow.split() if len(p) >= 2]
+            qlow = query.lower()
 
-            # 1. CEK LANGSUNG: Apakah server bilang TIDAK DITEMUKAN?
-            is_not_found_page = any(word in html_low for word in NOT_FOUND_WORDS)
-
-            # 2. Kalau server bilang tidak ditemukan DAN nama tidak ada di HTML -> JANGAN TAMPILKAN (berlaku semua situs)
-            if is_not_found_page and qlow not in html_low:
-                return False
-
-            # 3. 100% MATCH - SEMUA KATA HARUS ADA UNTUK SEMUA SITUS
-            # Contoh: jaden smith -> harus ada jaden DAN smith
-            # Kecuali untuk situs yang pakai JS berat, kita kasih toleransi panjang HTML
-            all_words_exist = all(kata in html_low for kata in parts) if parts else False
+            # === SISTEM PDDIKTI ASLI YANG SUDAH BERHASIL - BERLAKU SEMUA SITUS ===
+            # 1. Jika server bilang TIDAK DITEMUKAN -> JANGAN TAMPILKAN (ini yang bener)
+            if "pddikti" in domain:
+                if "tidak ditemukan" in html_low or "mahasiswa tidak ditemukan" in html_low or "data tidak ditemukan" in html_low:
+                    return False
+                # Jika tidak ada tulisan tidak ditemukan, ANGGAP ADA - TAMPILKAN
+                # Karena PDDIKTI pakai JS, HTML tidak ada namanya tapi di browser ada
+                return True
             
-            # 4. LOGIKA UNIVERSAL UNTUK SEMUA SITUS:
-            # A. Jika frasa lengkap ada -> VALID HIJAU
+            # 2. UNTUK SEMUA SITUS LAIN - LOGIKA SAMA PERSIS KAYAK PDDIKTI AWAL
+            # Cek apakah ada tulisan tidak ditemukan KHUSUS situs itu
+            not_found_id = ["tidak ditemukan", "tidak ada hasil", "data tidak ditemukan"]
+            not_found_en = ["no results found", "no results", "no video found", "0 results", "no videos found"]
+            
+            # Jika ada tulisan tidak ditemukan
+            if any(x in html_low for x in not_found_id + not_found_en):
+                # Tapi kalau nama masih ada di HTML, tetap tampilkan (kadang web nulis no results tapi tetap ada hasil)
+                if qlow in html_low:
+                    return True
+                # Jika benar-benar tidak ada nama + ada tulisan tidak ditemukan = JANGAN TAMPILKAN
+                return False
+            
+            # Jika tidak ada tulisan tidak ditemukan, cek apakah nama ada 100%
+            # Contoh jaden smith -> harus ada jaden dan smith
+            parts = [p for p in qlow.split() if len(p) >=2]
             if qlow in html_low:
                 return True
-            # B. Jika semua kata ada -> VALID HIJAU  
-            if all_words_exist:
+            if parts and all(p in html_low for p in parts):
                 return True
-            # C. Jika server TIDAK bilang tidak ditemukan DAN halaman panjang (JS site seperti PDDIKTI, YouTube, TikTok) -> VALID HIJAU
-            # Ini biar PDDIKTI, YouTube, TikTok, dll tetap tampil meski HTML awal tidak ada namanya karena render JS
-            if not is_not_found_page and len(html) > 8000:
-                return True
-
-            # Selain itu -> JANGAN TAMPILKAN
+            
+            # Jika tidak ada tulisan tidak ditemukan tapi juga tidak ada nama -> JANGAN TAMPILKAN
+            # Biar tidak ngaur
             return False
 
-    except Exception as e:
+    except:
         return False
 
 class handler(BaseHTTPRequestHandler):
@@ -99,24 +91,17 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"results":[]}'); return
         
         q_plus = urllib.parse.quote_plus(q)
-        q_path = urllib.parse.quote(q) # aprilia%20sbrfk - untuk PDDIKTI & xnxx
+        q_path = urllib.parse.quote(q) # aprilia%20sbrfk
 
-        valid_results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            futures = {}
+        valid = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+            futs = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                futures[executor.submit(cek_langsung_ke_server, url, q, domain)] = (domain, url)
+                futs[ex.submit(cek_bener, url, q, domain)] = (domain, url)
+            for f in concurrent.futures.as_completed(futs):
+                domain, url = futs[f]
+                if f.result():
+                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True, "status_text": "✓ DITEMUKAN"})
 
-            for f in concurrent.futures.as_completed(futures):
-                domain, url = futures[f]
-                if f.result() == True:
-                    valid_results.append({
-                        "title": f"{q} di {domain}", 
-                        "url": url, 
-                        "source": domain, 
-                        "valid": True, 
-                        "status_text": "✓ DITEMUKAN - CEK LANGSUNG 100%"
-                    })
-
-        self.wfile.write(json.dumps({"query": q, "results": valid_results}, ensure_ascii=False).encode())
+        self.wfile.write(json.dumps({"query": q, "results": valid}, ensure_ascii=False).encode())
