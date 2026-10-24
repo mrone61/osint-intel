@@ -4,42 +4,57 @@
 <title>OSINT INTEL SEARCH</title>
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-[#0a0a0a] text-white min-h-screen p-4">
-<div class="max-w-3xl mx-auto text-center">
-  <h1 class="text-3xl font-black mt-8">OSINT INTEL</h1>
-  <p class="text-zinc-500 text-xs tracking-[0.3em] mt-1">OPEN SOURCE INTELLINGECE</p>
-  <p class="text-zinc-600 text-[10px] mt-2">Author by Mr.One</p>
+<body class="bg-black text-white min-h-screen p-4">
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-3xl font-black text-center mt-6">OSINT INTEL</h1>
+  <p class="text-center text-zinc-500 text-xs tracking-widest">OPEN SOURCE INTELLIGENCE</p>
+  <p class="text-center text-zinc-600 text-[10px] mt-1">Author by Mr.One</p>
   
-  <div class="flex gap-2 mt-8 text-left">
-    <input id="q" value="Prabowo Subianto" type="text" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 outline-none">
+  <div class="flex gap-2 mt-8">
+    <input id="q" value="Prabowo Subianto" type="text" placeholder="Ketik nama, mis: Joko Widodo" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 outline-none">
     <button onclick="search()" class="bg-white text-black font-bold px-6 rounded-lg">CARI</button>
   </div>
-  <div id="status" class="text-zinc-500 text-sm mt-4"></div>
-  <div id="results" class="grid gap-3 mt-4 text-left"></div>
+
+  <div id="status" class="text-zinc-500 text-sm mt-4 text-center"></div>
+  <div id="results" class="grid gap-3 mt-4"></div>
 </div>
+
 <script>
-async function search(){
-  const query = document.getElementById('q').value.trim();
-  if(!query) return;
-  document.getElementById('status').textContent = 'Mencari '+query+'...';
-  document.getElementById('results').innerHTML = '';
-  try{
-    // PAKAI /api/index BIAR PASTI KENA PYTHON
-    const res = await fetch(`/api/index?q=${encodeURIComponent(query)}`);
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e){ throw new Error('API masih return HTML, cek vercel.json & api/index.py sudah ke-deploy belum. Response: '+text.slice(0,100)); }
-    
-    document.getElementById('status').textContent = `Ditemukan ${data.total} sumber untuk "${data.query}"`;
-    data.results.forEach(r => {
-      document.getElementById('results').innerHTML += `
-        <a href="${r.url}" target="_blank" class="block bg-zinc-900 border border-zinc-800 hover:border-white rounded-lg p-4">
-          <div class="flex justify-between"><span class="font-bold text-sm">${r.title}</span><span class="text-[10px] bg-zinc-800 px-2 py-1 rounded">${r.source}</span></div>
-          <div class="text-xs text-zinc-500 break-all mt-1">${r.url}</div>
-        </a>`;
-    });
-  }catch(e){ document.getElementById('status').textContent = 'Error: '+e.message; }
+function search(){
+  const q = document.getElementById('q').value.trim();
+  if(!q) return;
+  const q_enc = encodeURIComponent(q);
+  document.getElementById('status').textContent = `Menampilkan ${15} sumber terbuka untuk "${q}"`;
+
+  const sources = [
+    {t:`Google - ${q}`, u:`https://www.google.com/search?q=${q_enc}`, s:"google"},
+    {t:`Google News - ${q}`, u:`https://news.google.com/search?q=${q_enc}`, s:"gnews"},
+    {t:`Wikipedia ID - ${q}`, u:`https://id.wikipedia.org/w/index.php?search=${q_enc}`, s:"wiki"},
+    {t:`Twitter / X - ${q}`, u:`https://x.com/search?q=${q_enc}`, s:"twitter"},
+    {t:`YouTube - ${q}`, u:`https://www.youtube.com/results?search_query=${q_enc}`, s:"youtube"},
+    {t:`TikTok - ${q}`, u:`https://www.tiktok.com/search?q=${q_enc}`, s:"tiktok"},
+    {t:`Instagram via Google - ${q}`, u:`https://www.google.com/search?q=site%3Ainstagram.com+${q_enc}`, s:"instagram"},
+    {t:`Facebook Search - ${q}`, u:`https://www.facebook.com/search/top/?q=${q_enc}`, s:"facebook"},
+    {t:`Detik.com - ${q}`, u:`https://www.detik.com/search/searchall?query=${q_enc}`, s:"detik"},
+    {t:`Kompas.com - ${q}`, u:`https://search.kompas.com/search?q=${q_enc}`, s:"kompas"},
+    {t:`CNN Indonesia - ${q}`, u:`https://www.cnnindonesia.com/search/?query=${q_enc}`, s:"cnn"},
+    {t:`PDDikti - ${q}`, u:`https://pddikti.kemdikbud.go.id/search/${q_enc}`, s:"pddikti"},
+    {t:`LinkedIn - ${q}`, u:`https://www.linkedin.com/search/results/all/?keywords=${q_enc}`, s:"linkedin"},
+    {t:`Google Maps - ${q}`, u:`https://www.google.com/maps/search/${q_enc}`, s:"maps"},
+    {t:`Bing - ${q}`, u:`https://www.bing.com/search?q=${q_enc}`, s:"bing"},
+  ];
+
+  document.getElementById('results').innerHTML = sources.map(r => `
+    <a href="${r.u}" target="_blank" class="block bg-zinc-900 border border-zinc-800 hover:border-white rounded-lg p-4 transition">
+      <div class="flex justify-between items-center">
+        <span class="font-bold text-sm">${r.t}</span>
+        <span class="text-[10px] bg-zinc-800 px-2 py-1 rounded uppercase">${r.s}</span>
+      </div>
+      <div class="text-xs text-zinc-500 break-all mt-1">${r.u}</div>
+    </a>
+  `).join('');
 }
+document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') search(); });
 window.onload = search;
 </script>
 </body>
