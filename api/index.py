@@ -12,79 +12,99 @@ TEMPLATES = {
 "umi.ac.id": "https://umi.ac.id/?s={q_plus}",
 "unismuh.ac.id": "https://unismuh.ac.id/?s={q_plus}",
 "uim-makassar.ac.id": "https://uim-makassar.ac.id/?s={q_plus}",
-"uncen.ac.id": "https://uncen.ac.id/?s={q_plus}",
-"unipa.ac.id": "https://unipa.ac.id/?s={q_plus}",
 "ui.ac.id": "https://www.ui.ac.id/?s={q_plus}",
 "ugm.ac.id": "https://ugm.ac.id/?s={q_plus}",
 "itb.ac.id": "https://www.itb.ac.id/search?q={q_plus}",
 "ipb.ac.id": "https://www.ipb.ac.id/?s={q_plus}",
 "its.ac.id": "https://www.its.ac.id/?s={q_plus}",
-"unpad.ac.id": "https://www.unpad.ac.id/?s={q_plus}",
-"undip.ac.id": "https://www.undip.ac.id/?s={q_plus}",
-"unair.ac.id": "https://www.unair.ac.id/?s={q_plus}",
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
 "cnnindonesia.com": "https://www.cnnindonesia.com/search?query={q_plus}",
 "tribunnews.com": "https://www.tribunnews.com/search?q={q_plus}",
 "youtube.com": "https://www.youtube.com/results?search_query={q_plus}",
-"facebook.com": "https://www.facebook.com/search/top/?q={q_plus}",
-"x.com": "https://x.com/search?q={q_plus}",
-"tiktok.com": "https://www.tiktok.com/search?q={q_plus}",
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
-"scholar.google.com": "https://scholar.google.com/scholar?q={q_plus}",
 }
 
+# CUMA 2 INI YANG BOLEH LANGSUNG HIJAU
 FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
 
 NO_RESULT = [
 "tidak ditemukan","tidak ada hasil","data tidak ditemukan",
-"no results found","no result found","0 results","nothing found",
-"no posts found","tidak ada artikel","tidak ada postingan",
-"pencarian tidak ditemukan","berita tidak ditemukan","tidak ada yang cocok",
-"no video found","maaf, tidak ada","sorry, no results","hasil pencarian kosong"
+"no results found","0 results","nothing found","no posts found",
+"pencarian tidak ditemukan","berita tidak ditemukan","tidak ada artikel",
+"tidak ada yang cocok","hasil tidak ditemukan","maaf, tidak ada"
 ]
 
-def cek_nama_lengkap(url, query, domain):
+# Ini jebakan yang bikin cnn & unismuh ngaur
+JEBAKAN_SEARCH = [
+"hasil pencarian untuk","search results for","search result for",
+"hasil cari","pencarian untuk","menampilkan hasil untuk"
+]
+
+def cek_valid(url, query, domain):
     if domain in FORCE_ALWAYS:
         return True
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "id-ID"})
-        with urllib.request.urlopen(req, timeout=8) as r:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=7) as r:
             raw = r.read().decode('utf-8', errors='ignore')
             low = raw.lower()
             qlow = query.lower().strip()
-            q_parts = qlow.split()
-            
-            # 1. LANGKAH WAJIB UNTUK SEMUA DOMAIN: Cek kata tidak ada hasil
-            for kw in NO_RESULT:
-                if kw in low:
+
+            # 1. Kalau web bilang tidak ada hasil, MATI LANGSUNG
+            for k in NO_RESULT:
+                if k in low:
                     return False
 
-            # 2. HAPUS SEMUA JEBAKAN UNTUK SEMUA DOMAIN
+            # 2. BERSIHKAN HTML DARI JEBAKAN
             clean = re.sub(r'<input[^>]*>', ' ', low)
             clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
             clean = re.sub(r'<meta[^>]*>', ' ', clean)
-            clean = re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=re.DOTALL)
+            clean = re.sub(r'<script.*?</script>', ' ', clean, flags=re.DOTALL)
+            clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
 
-            # 3. VALIDASI NAMA LENGKAP UNTUK SEMUA DOMAIN
-            # Harus ada nama lengkap persis
+            # 3. HAPUS SEMUA FRASE JEBAKAN "HASIL PENCARIAN UNTUK: EVANITA MANULLANG"
+            # Ini penyebab utama cnn & unismuh jadi hijau padahal kosong
+            for j in JEBAKAN_SEARCH:
+                # hapus "hasil pencarian untuk: evanita manullang" dan "hasil pencarian untuk evanita manullang"
+                clean = clean.replace(f"{j}: {qlow}", " ")
+                clean = clean.replace(f"{j} {qlow}", " ")
+                clean = clean.replace(f"{j}:", " ")
+                clean = clean.replace(j, " ")
+
+            # Hapus juga query yang masih nempel di dalam quotes pencarian
+            clean = clean.replace(f'"{qlow}"', ' ')
+            clean = clean.replace(f"'{qlow}'", ' ')
+
+            # 4. BARU CEK, APAKAH SETELAH SEMUA JEBAKAN DIHAPUS, NAMA MASIH ADA?
+            # Kalau tidak ada, berarti memang tidak ada berita/dosen nya
             if qlow not in clean:
                 return False
+
+            # 5. EXTRA KETAT: harus ada minimal di dalam <a> atau <h2> <h3> <article>
+            # Kalau cuma di teks biasa, anggap tidak valid
+            # Cek apakah ada link judul yang mengandung nama
+            links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
+            found_in_link = False
+            for link_text in links:
+                if qlow in link_text.lower():
+                    found_in_link = True
+                    break
             
-            # Harus ada semua kata depan tengah belakang (kalau nama 2-3 kata)
-            # Contoh evanita manullang -> harus ada evanita DAN manullang
-            for part in q_parts:
-                if len(part) >= 3: # abaikan kata pendek seperti "bin"
-                    if part not in clean:
-                        return False
-            
-            # 4. KETAT UNTUK SEMUA: minimal muncul 2x di konten bersih
-            # Kalau cuma 1x, kemungkinan cuma sisa di breadcrumb
-            if clean.count(qlow) < 1:
-                return False
+            # Untuk berita dan kampus, wajib ada di judul link, bukan cuma di body
+            if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun']):
+                if not found_in_link:
+                    # cek juga di heading
+                    headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
+                    for h in headings:
+                        if qlow in h.lower():
+                            found_in_link = True
+                            break
+                if not found_in_link:
+                    return False
 
             return True
-    except:
+    except Exception as e:
         return False
 
 class handler(BaseHTTPRequestHandler):
@@ -103,7 +123,7 @@ class handler(BaseHTTPRequestHandler):
             futs = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                futs[ex.submit(cek_nama_lengkap, url, q, domain)] = (domain, url)
+                futs[ex.submit(cek_valid, url, q, domain)] = (domain, url)
             for f in concurrent.futures.as_completed(futs):
                 domain, url = futs[f]
                 if f.result():
