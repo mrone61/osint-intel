@@ -1,61 +1,123 @@
 <!DOCTYPE html>
 <html lang="id">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OSINT INTEL SEARCH</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@700;900&display=swap');
+body{font-family:'JetBrains Mono',monospace}
+h1{font-family:'Inter',sans-serif}
+.scrollbar-hide::-webkit-scrollbar{display:none}
+</style>
 </head>
-<body class="bg-black text-white min-h-screen p-4">
-<div class="max-w-3xl mx-auto">
-  <h1 class="text-3xl font-black text-center mt-6">OSINT INTEL</h1>
-  <p class="text-center text-zinc-500 text-xs tracking-widest">OPEN SOURCE INTELLIGENCE</p>
-  <p class="text-center text-zinc-600 text-[10px] mt-1">Author by Mr.One</p>
-  
-  <div class="flex gap-2 mt-8">
-    <input id="q" value="Prabowo Subianto" type="text" placeholder="Ketik nama, mis: Joko Widodo" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 outline-none">
-    <button onclick="search()" class="bg-white text-black font-bold px-6 rounded-lg">CARI</button>
+<body class="bg-[#050507] text-white min-h-screen">
+<div class="max-w-5xl mx-auto px-4 py-6">
+
+  <!-- HEADER -->
+  <div class="text-center border border-zinc-800 rounded-2xl bg-zinc-900/30 p-6">
+    <h1 class="text-4xl font-black tracking-tighter">OSINT INTEL</h1>
+    <p class="text-[11px] tracking-[0.4em] text-zinc-500 mt-1">OPEN SOURCE INTELLIGENCE</p>
+    <p class="text-[10px] text-zinc-600 mt-2">Author by Mr.One</p>
+    <div class="flex gap-2 mt-6 max-w-2xl mx-auto">
+      <input id="q" value="Prabowo Subianto" class="flex-1 bg-black border border-zinc-700 rounded-xl px-5 py-3.5 text-sm outline-none focus:border-white" placeholder="Ketik nama target...">
+      <button onclick="doSearch()" id="btn" class="bg-white text-black font-black px-8 rounded-xl text-sm hover:bg-zinc-200">CARI</button>
+    </div>
   </div>
 
-  <div id="status" class="text-zinc-500 text-sm mt-4 text-center"></div>
-  <div id="results" class="grid gap-3 mt-4"></div>
+  <!-- STATS & FILTER -->
+  <div class="flex flex-wrap gap-2 items-center justify-between mt-5">
+    <div id="status" class="text-[11px] text-zinc-400">Siap mencari ratusan jejak digital...</div>
+    <div class="flex gap-2">
+      <button onclick="filterCat('all')" id="f-all" class="filter-btn bg-white text-black px-3 py-1.5 rounded-full text-[10px] font-bold">ALL</button>
+      <button onclick="filterCat('news')" id="f-news" class="filter-btn bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-[10px]">NEWS</button>
+      <button onclick="filterCat('gov')" id="f-gov" class="filter-btn bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-[10px]">GOV/EDU</button>
+      <button onclick="filterCat('pdf')" id="f-pdf" class="filter-btn bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-[10px]">DOCS</button>
+    </div>
+  </div>
+
+  <div id="results" class="grid md:grid-cols-2 gap-3 mt-4"></div>
+  <div id="loadMoreWrap" class="text-center mt-6 hidden"><button onclick="loadMore()" class="border border-zinc-700 px-6 py-2 rounded-full text-xs">LOAD 50 LAGI</button></div>
 </div>
 
 <script>
-function search(){
+let allData = [];
+let shown = 0;
+let currentCat = 'all';
+const NEWS_DOMAINS = ['detik','kompas','cnn','liputan6','tribun','antaranews','tempo','kumparan','viva','okezone'];
+const GOV_DOMAINS = ['go.id','ac.id','pddikti','kemdikbud','ui.ac','ugm.ac','itb.ac','unhas.ac','uncen.ac','gov','edu'];
+
+function getCat(source){
+  const s = source.toLowerCase();
+  if(s.includes('.pdf') || s.includes('pdf')) return 'pdf';
+  if(NEWS_DOMAINS.some(d=>s.includes(d))) return 'news';
+  if(GOV_DOMAINS.some(d=>s.includes(d))) return 'gov';
+  return 'all';
+}
+
+function filterCat(cat){
+  currentCat = cat;
+  document.querySelectorAll('.filter-btn').forEach(b=>{b.className='filter-btn bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-[10px]';});
+  document.getElementById('f-'+cat).className='filter-btn bg-white text-black px-3 py-1.5 rounded-full text-[10px] font-bold';
+  shown = 0;
+  document.getElementById('results').innerHTML = '';
+  render();
+}
+
+function render(){
+  let filtered = currentCat==='all' ? allData : allData.filter(r=> getCat(r.source+' '+r.url)===currentCat);
+  const slice = filtered.slice(shown, shown+50);
+  slice.forEach(r=>{
+    const cat = getCat(r.source+' '+r.url);
+    const badgeColor = cat==='news' ? 'bg-red-900/50 text-red-300' : cat==='gov' ? 'bg-blue-900/50 text-blue-300' : cat==='pdf' ? 'bg-yellow-900/50 text-yellow-300' : 'bg-zinc-800 text-zinc-400';
+    document.getElementById('results').innerHTML += `
+      <a href="${r.url}" target="_blank" class="group block bg-zinc-900/50 border border-zinc-800 hover:border-white rounded-xl p-4 transition">
+        <div class="flex justify-between items-start gap-2">
+          <h3 class="font-bold text-[13px] leading-tight group-hover:text-white line-clamp-2">${r.title || r.source}</h3>
+          <span class="text-[9px] px-2 py-1 rounded-full uppercase shrink-0 ${badgeColor}">${r.source.slice(0,18)}</span>
+        </div>
+        <div class="text-[11px] text-zinc-500 break-all mt-2 line-clamp-2">${r.url}</div>
+        <div class="text-[10px] text-green-500/70 mt-2">✓ VERIFIED MENTION</div>
+      </a>
+    `;
+  });
+  shown += slice.length;
+  document.getElementById('loadMoreWrap').style.display = shown < filtered.length ? 'block' : 'none';
+  document.getElementById('status').innerHTML = `Menampilkan <b class="text-white">${shown}</b> dari <b class="text-white">${filtered.length}</b> situs valid | Total internet: ${allData.length} sumber`;
+}
+
+function loadMore(){ render(); }
+
+async function doSearch(){
   const q = document.getElementById('q').value.trim();
   if(!q) return;
-  const q_enc = encodeURIComponent(q);
-  document.getElementById('status').textContent = `Menampilkan ${15} sumber terbuka untuk "${q}"`;
-
-  const sources = [
-    {t:`Google - ${q}`, u:`https://www.google.com/search?q=${q_enc}`, s:"google"},
-    {t:`Google News - ${q}`, u:`https://news.google.com/search?q=${q_enc}`, s:"gnews"},
-    {t:`Wikipedia ID - ${q}`, u:`https://id.wikipedia.org/w/index.php?search=${q_enc}`, s:"wiki"},
-    {t:`Twitter / X - ${q}`, u:`https://x.com/search?q=${q_enc}`, s:"twitter"},
-    {t:`YouTube - ${q}`, u:`https://www.youtube.com/results?search_query=${q_enc}`, s:"youtube"},
-    {t:`TikTok - ${q}`, u:`https://www.tiktok.com/search?q=${q_enc}`, s:"tiktok"},
-    {t:`Instagram via Google - ${q}`, u:`https://www.google.com/search?q=site%3Ainstagram.com+${q_enc}`, s:"instagram"},
-    {t:`Facebook Search - ${q}`, u:`https://www.facebook.com/search/top/?q=${q_enc}`, s:"facebook"},
-    {t:`Detik.com - ${q}`, u:`https://www.detik.com/search/searchall?query=${q_enc}`, s:"detik"},
-    {t:`Kompas.com - ${q}`, u:`https://search.kompas.com/search?q=${q_enc}`, s:"kompas"},
-    {t:`CNN Indonesia - ${q}`, u:`https://www.cnnindonesia.com/search/?query=${q_enc}`, s:"cnn"},
-    {t:`PDDikti - ${q}`, u:`https://pddikti.kemdikbud.go.id/search/${q_enc}`, s:"pddikti"},
-    {t:`LinkedIn - ${q}`, u:`https://www.linkedin.com/search/results/all/?keywords=${q_enc}`, s:"linkedin"},
-    {t:`Google Maps - ${q}`, u:`https://www.google.com/maps/search/${q_enc}`, s:"maps"},
-    {t:`Bing - ${q}`, u:`https://www.bing.com/search?q=${q_enc}`, s:"bing"},
-  ];
-
-  document.getElementById('results').innerHTML = sources.map(r => `
-    <a href="${r.u}" target="_blank" class="block bg-zinc-900 border border-zinc-800 hover:border-white rounded-lg p-4 transition">
-      <div class="flex justify-between items-center">
-        <span class="font-bold text-sm">${r.t}</span>
-        <span class="text-[10px] bg-zinc-800 px-2 py-1 rounded uppercase">${r.s}</span>
-      </div>
-      <div class="text-xs text-zinc-500 break-all mt-1">${r.u}</div>
-    </a>
-  `).join('');
+  const btn = document.getElementById('btn');
+  btn.textContent = 'SCANNING...';
+  btn.disabled = true;
+  document.getElementById('status').textContent = `Mengumpulkan ratusan sumber yang menyebut "${q}" dari DuckDuckGo & Bing...`;
+  document.getElementById('results').innerHTML = '<div class="col-span-2 text-center py-10 text-zinc-500 text-xs animate-pulse">MEMVALIDASI RATUSAN URL... INI BUTUH 8-12 DETIK</div>';
+  
+  try{
+    const res = await fetch(`/api/index?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    allData = data.results || [];
+    shown = 0;
+    document.getElementById('results').innerHTML = '';
+    if(allData.length===0){
+      document.getElementById('status').textContent = `Tidak ada situs di internet yang menyebut "${q}"`;
+      document.getElementById('results').innerHTML = '<div class="col-span-2 text-center py-10 text-zinc-600">Coba nama lain. Sistem hanya tampilkan URL yang BENAR-BENAR menyebut nama tersebut.</div>';
+    } else {
+      filterCat('all');
+    }
+  }catch(e){
+    document.getElementById('status').textContent = 'Error API: '+e.message;
+  } finally {
+    btn.textContent = 'CARI';
+    btn.disabled = false;
+  }
 }
-document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') search(); });
-window.onload = search;
+document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+window.onload = doSearch;
 </script>
 </body>
 </html>
