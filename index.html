@@ -7,65 +7,65 @@
 <style>
 body{background:#080808;color:#e0e0e0;font-family:'Courier New',monospace;margin:0;padding:20px}
 .header{text-align:center;border-bottom:1px solid #222;padding-bottom:20px;margin-bottom:20px}
-.header h1{letter-spacing:4px;margin:0}
+.header h1{letter-spacing:4px;margin:0;color:#0f0}
 .header p{color:#666;font-size:12px}
 .box{max-width:800px;margin:auto;background:#111;border:1px solid #222;border-radius:14px;padding:20px}
 input{width:65%;padding:14px;background:#000;color:#0f0;border:1px solid #333;border-radius:8px;outline:none}
 button{width:30%;padding:14px;background:#0f0;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer}
-#result{margin-top:20px;display:none}
-.post{border:1px solid #222;padding:12px;border-radius:10px;margin-top:12px;background:#0a0a0a}
-a{color:#0f0;text-decoration:none}
-.badge{display:inline-block;background:#0f0;color:#000;padding:2px 8px;border-radius:4px;font-size:11px}
+#result{margin-top:20px;display:none;word-break:break-all}
+.card{border:1px solid #222;padding:15px;border-radius:10px;background:#0a0a0a}
+a{color:#0f0}
+.badge{display:inline-block;background:#0f0;color:#000;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:bold}
 </style>
 </head>
 <body>
 <div class="header">
 <h1>OSINT INTEL</h1>
-<p>INDONESIAN THREAT INTELLIGENCE // LEGAL PUBLIC OSINT</p>
+<p>INDONESIAN THREAT INTELLIGENCE // LEGAL PUBLIC OSINT v3</p>
 </div>
-
 <div class="box">
 <div style="display:flex;gap:10px">
-<input id="username" placeholder="Target username: mr_one61">
+<input id="username" placeholder="Target username: instagram">
 <button onclick="scan()">SCAN TARGET</button>
 </div>
 <div id="result"></div>
 </div>
-
 <script>
-// GANTI INI DENGAN URL VERCEL LU
-const BACKEND = "https://osint-intel-psi.vercel.app/";
+// INI UDAH BENER, JANGAN DIUBAH LAGI
+const BACKEND = "/api/ig";
 
 async function scan(){
-  const u = document.getElementById('username').value.trim();
+  const u = document.getElementById('username').value.trim().replace('@','');
   if(!u) return alert('Isi username bro!');
   const box = document.getElementById('result');
   box.style.display='block';
-  box.innerHTML = '⏳ Scanning @'+u+' ...';
+  box.innerHTML = '⏳ Scanning @'+u+' ... menghubungi intel server...';
 
   try{
-    const r = await fetch(`${BACKEND}?u=${u}`);
-    const d = await r.json();
-    if(d.error) throw d.error;
+    const r = await fetch(`${BACKEND}?u=${encodeURIComponent(u)}`);
+    const text = await r.text();
+    let d;
+    try { d = JSON.parse(text); } catch { throw text.slice(0,200); }
+    
+    if(d.error) throw d.error + (d.hint ? ' - ' + d.hint : '');
 
-    let html = `
-      <h3>@${d.username} <span class="badge">${d.is_private ? 'PRIVATE' : 'PUBLIC'}</span></h3>
-      <p>Nama: ${d.nama}<br>Bio: ${d.bio}<br>Followers: ${d.followers}</p>
-      <h4>📁 POST TERBARU (Metadata)</h4>
+    box.innerHTML = `
+      <div class="card">
+        <h3>@${d.username} <span class="badge">${d.full_name || ''}</span></h3>
+        <img src="${d.profile_pic || ''}" style="width:100px;border-radius:50%;border:2px solid #0f0" onerror="this.style.display='none'"><br><br>
+        <b>Nama:</b> ${d.full_name || '-'}<br>
+        <b>Bio:</b> ${d.bio || '-'}<br><br>
+        <b>Followers:</b> ${d.followers || '-'}<br>
+        <b>Following:</b> ${d.following || '-'}<br>
+        <b>Posts:</b> ${d.posts || '-'}<br><br>
+        <small style="color:#666">Source: ${d.source || 'html'} | ${d.note || ''}</small><br><br>
+        <a href="https://www.instagram.com/${d.username}/" target="_blank">🔗 Buka Instagram @${d.username}</a>
+      </div>
     `;
-    d.posts.forEach(p=>{
-      html+=`<div class="post">
-      📅 <b>Tanggal Upload:</b> ${p.tanggal}<br>
-      📍 <b>Lokasi Tag:</b> ${p.lokasi}<br>
-      📝 <b>Caption:</b> ${p.caption}<br>
-      🔗 <a href="${p.link}" target="_blank">${p.link}</a>
-      </div>`;
-    });
-    box.innerHTML = html;
   }catch(e){
-    box.innerHTML = '❌ Gagal: '+e+'<br><br>Pastikan URL Backend di script sudah lu ganti dengan URL Vercel asli.';
+    box.innerHTML = '❌ Gagal: '+e+'<br><br>Coba username publik lain seperti <b>instagram</b> dulu. Kalau masih 429, tunggu 5-10 menit karena IP Vercel lagi di-limit IG.';
   }
 }
 </script>
 </body>
-  </html>
+</html>
