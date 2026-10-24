@@ -3,6 +3,7 @@ import urllib.parse, json, urllib.request, concurrent.futures
 
 TEMPLATES = {
 "pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
+"google.com": "https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Apddikti.kemdiktisaintek.go.id",
 "sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
 "garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
 "ustj.ac.id": "https://ustj.ac.id/?s={q_plus}",
@@ -10,6 +11,9 @@ TEMPLATES = {
 "unm.ac.id": "https://unm.ac.id/?s={q_plus}",
 "umi.ac.id": "https://umi.ac.id/?s={q_plus}",
 "unismuh.ac.id": "https://unismuh.ac.id/?s={q_plus}",
+"uim-makassar.ac.id": "https://uim-makassar.ac.id/?s={q_plus}",
+"uncen.ac.id": "https://uncen.ac.id/?s={q_plus}",
+"unipa.ac.id": "https://unipa.ac.id/?s={q_plus}",
 "ui.ac.id": "https://www.ui.ac.id/?s={q_plus}",
 "ugm.ac.id": "https://ugm.ac.id/?s={q_plus}",
 "itb.ac.id": "https://www.itb.ac.id/search?q={q_plus}",
@@ -20,35 +24,50 @@ TEMPLATES = {
 "unair.ac.id": "https://www.unair.ac.id/?s={q_plus}",
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
+"cnnindonesia.com": "https://www.cnnindonesia.com/search?query={q_plus}",
+"tribunnews.com": "https://www.tribunnews.com/search?q={q_plus}",
 "youtube.com": "https://www.youtube.com/results?search_query={q_plus}",
 "facebook.com": "https://www.facebook.com/search/top/?q={q_plus}",
 "x.com": "https://x.com/search?q={q_plus}",
 "tiktok.com": "https://www.tiktok.com/search?q={q_plus}",
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
+"scholar.google.com": "https://scholar.google.com/scholar?q={q_plus}",
 "xnxx.com": "https://www.xnxx.com/search/{q_path}",
 "xvideos.com": "https://www.xvideos.com/?k={q_plus}",
 "pornhub.com": "https://www.pornhub.com/video/search?search={q_plus}",
 "xhamster.com": "https://xhamster.com/search/{q_path}",
 }
 
-FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "sinta.kemdiktisaintek.go.id", "garuda.kemdikbud.go.id"]
+# CUMA 2 INI YANG SELALU HIJAU
+FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
 
-def cek_valid(url, query, domain):
+def cek_nama_lengkap(url, query, domain):
+    # 2 pusat utama selalu tampil
     if domain in FORCE_ALWAYS:
         return True
+
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=7) as r:
             html = r.read().decode('utf-8', errors='ignore').lower()
-            qlow = query.lower()
-            # harus ada nama nya persis di html web itu
-            if qlow in html:
-                # tapi kalau web bilang tidak ditemukan, jangan tampilkan
-                if "tidak ditemukan" in html or "no results" in html or "no video found" in html:
-                    if qlow not in html:
-                        return False
-                return True
-            return False
+            qlow = query.lower().strip()
+
+            # WAJIB NAMA LENGKAP PERSIS - contoh "aprilia sbrfk"
+            # kalau cuma "aprilia" saja ada di internet, tidak boleh tampil
+            # harus ada "aprilia sbrfk" persis di html
+            
+            if qlow not in html:
+                return False
+            
+            # kalau ada tulisan tidak ditemukan, jangan tampilkan
+            if any(x in html for x in ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","no video found","0 results"]):
+                # double check, kalau qlow memang tidak ada, jangan tampil
+                if qlow not in html:
+                    return False
+            
+            # kalau lolos, berarti nama lengkap persis ada di web itu
+            return True
+            
     except:
         return False
 
@@ -64,10 +83,13 @@ class handler(BaseHTTPRequestHandler):
         q_plus = urllib.parse.quote_plus(q)
         q_path = urllib.parse.quote(q)
         valid = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as ex:
-            futs = {ex.submit(cek_valid, tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path), q, d): (d, tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)) for d, tpl in TEMPLATES.items()}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+            futs = {}
+            for domain, tpl in TEMPLATES.items():
+                url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
+                futs[ex.submit(cek_nama_lengkap, url, q, domain)] = (domain, url)
             for f in concurrent.futures.as_completed(futs):
-                d, url = futs[f]
+                domain, url = futs[f]
                 if f.result():
-                    valid.append({"title": f"{q} di {d}", "url": url, "source": d, "valid": True})
+                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
         self.wfile.write(json.dumps({"query": q, "results": valid}, ensure_ascii=False).encode())
