@@ -32,42 +32,22 @@ TEMPLATES = {
 "tiktok.com": "https://www.tiktok.com/search?q={q_plus}",
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 "scholar.google.com": "https://scholar.google.com/scholar?q={q_plus}",
-"xnxx.com": "https://www.xnxx.com/search/{q_path}",
-"xvideos.com": "https://www.xvideos.com/?k={q_plus}",
-"pornhub.com": "https://www.pornhub.com/video/search?search={q_plus}",
-"xhamster.com": "https://xhamster.com/search/{q_path}",
 }
 
-# CUMA 2 INI YANG SELALU HIJAU
+# CUMA 2 INI YANG SELALU HIJAU - PUSAT UTAMA
 FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
 
 def cek_nama_lengkap(url, query, domain):
-    # 2 pusat utama selalu tampil
     if domain in FORCE_ALWAYS:
         return True
-
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=7) as r:
             html = r.read().decode('utf-8', errors='ignore').lower()
             qlow = query.lower().strip()
-
-            # WAJIB NAMA LENGKAP PERSIS - contoh "aprilia sbrfk"
-            # kalau cuma "aprilia" saja ada di internet, tidak boleh tampil
-            # harus ada "aprilia sbrfk" persis di html
-            
             if qlow not in html:
                 return False
-            
-            # kalau ada tulisan tidak ditemukan, jangan tampilkan
-            if any(x in html for x in ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","no video found","0 results"]):
-                # double check, kalau qlow memang tidak ada, jangan tampil
-                if qlow not in html:
-                    return False
-            
-            # kalau lolos, berarti nama lengkap persis ada di web itu
             return True
-            
     except:
         return False
 
