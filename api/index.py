@@ -1,114 +1,85 @@
 from http.server import BaseHTTPRequestHandler
 import urllib.parse, json, urllib.request, concurrent.futures, re
 
-TEMPLATES = {
-"pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
-"google.com": "https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Apddikti.kemdiktisaintek.go.id",
-"sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
-"garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
-"ustj.ac.id": "https://ustj.ac.id/?s={q_plus}",
-"unhas.ac.id": "https://unhas.ac.id/?s={q_plus}",
-"unm.ac.id": "https://unm.ac.id/?s={q_plus}",
-"umi.ac.id": "https://umi.ac.id/?s={q_plus}",
-"unismuh.ac.id": "https://unismuh.ac.id/?s={q_plus}",
-"uim-makassar.ac.id": "https://uim-makassar.ac.id/?s={q_plus}",
-"ui.ac.id": "https://www.ui.ac.id/?s={q_plus}",
-"ugm.ac.id": "https://ugm.ac.id/?s={q_plus}",
-"itb.ac.id": "https://www.itb.ac.id/search?q={q_plus}",
-"ipb.ac.id": "https://www.ipb.ac.id/?s={q_plus}",
-"its.ac.id": "https://www.its.ac.id/?s={q_plus}",
-"detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
-"kompas.com": "https://www.kompas.com/search?q={q_plus}",
-"cnnindonesia.com": "https://www.cnnindonesia.com/search?query={q_plus}",
-"tribunnews.com": "https://www.tribunnews.com/search?q={q_plus}",
-"youtube.com": "https://www.youtube.com/results?search_query={q_plus}",
-"wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
+TEMPLATES_GOOGLE = {
+    "google.com": "https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Adetik.com+OR+site%3Akompas.com+OR+site%3Acnnindonesia.com+OR+site%3Atribunnews.com+OR+site%3Aantaranews.com+OR+site%3Aliputan6.com+OR+site%3Apddikti.kemdiktisaintek.go.id"
 }
 
-NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","no posts found","pencarian tidak ditemukan","berita tidak ditemukan","hasil tidak ditemukan","did not match any documents","sorry, but nothing matched"]
-
-JEBAKAN_SEARCH = ["hasil pencarian untuk","search results for","search result for","hasil cari","pencarian untuk","menampilkan hasil untuk"]
+NO_RESULT = ["did not match any documents","tidak menemukan","no results found","tidak ditemukan","tidak ada hasil"]
+JEBAKAN = ["search results for","hasil pencarian untuk"]
 
 def is_angka(q): return q.strip().isdigit()
 
-def cek_google_saksi(query):
-    """Kalau PDDIKTI diblokir Vercel, tanya Google apakah nama ini ada di SINTA/PDDIKTI"""
-    if is_angka(query): return False
-    try:
-        q_plus = urllib.parse.quote_plus(query)
-        # Tanya Google: apakah nama ini ada di SINTA atau PDDIKTI?
-        url = f"https://www.google.com/search?q={q_plus}+site%3Asinta.kemdiktisaintek.go.id+OR+site%3Apddikti.kemdiktisaintek.go.id+OR+site%3Agaruda.kemdikbud.go.id"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            raw = r.read().decode('utf-8','ignore').lower()
-            if "did not match any documents" in raw or "tidak menemukan" in raw:
-                return False
-            # Kalau Google nemu link sinta/pddikti/garuda = berarti dosen asli
-            if "sinta.kemdiktisaintek.go.id" in raw or "pddikti.kemdiktisaintek.go.id" in raw or "garuda.kemdikbud.go.id" in raw:
-                return True
-            return False
-    except:
-        return False
-
-def cek_pddikti_gate(query):
-    if is_angka(query): return False
+def get_links_from_google(query):
+    """Ambil semua link media yang Google temukan"""
+    if is_angka(query): return []
     q_plus = urllib.parse.quote_plus(query)
-    # 1. Coba API PDDIKTI langsung
-    endpoints = [
-        f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}",
-        f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?keyword={q_plus}",
-        f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
-    ]
-    for api_url in endpoints:
-        try:
-            req = urllib.request.Request(api_url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://pddikti.kemdiktisaintek.go.id/","Accept":"application/json, text/html, */*"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                raw = r.read().decode('utf-8','ignore')
-                low = raw.lower()
-                if len(raw)<100: continue
-                if '"total":0' in low or '"data":[]' in low: continue
-                if any(k in low for k in NO_RESULT): continue
-                if query.lower().split()[0] in low and query.lower().split()[-1] in low: # cek nama depan & belakang aja
-                    return True
-        except:
-            continue
-    # 2. Kalau semua diblokir Vercel, pakai Google sebagai saksi
-    if cek_google_saksi(query):
-        return True
-    return False
-
-def cek_valid(url, query, domain):
+    url = f"https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Adetik.com+OR+site%3Akompas.com+OR+site%3Acnnindonesia.com+OR+site%3Atribunnews.com+OR+site%3Aantaranews.com+OR+site%3Aliputan6.com+OR+site%3Apddikti.kemdiktisaintek.go.id&num=20"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=7) as r:
-            raw = r.read().decode('utf-8', errors='ignore')
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+        })
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.read().decode('utf-8','ignore')
             low = raw.lower()
-            qlow = query.lower().strip()
-            for k in NO_RESULT:
-                if k in low: return False
-            clean = re.sub(r'<input[^>]*>', ' ', low)
-            clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
-            clean = re.sub(r'<meta[^>]*>', ' ', clean)
-            clean = re.sub(r'<script.*?</script>', ' ', clean, flags=re.DOTALL)
-            clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
-            for j in JEBAKAN_SEARCH:
-                clean = clean.replace(f"{j}: {qlow}", " ")
-                clean = clean.replace(f"{j} {qlow}", " ")
-                clean = clean.replace(f"{j}:", " ")
-                clean = clean.replace(j, " ")
-            clean = clean.replace(f'"{qlow}"', ' ').replace(f"'{qlow}'", ' ')
-            if qlow not in clean: return False
+            if any(k in low for k in NO_RESULT):
+                return []
+            # Google nyimpen link asli di /url?q=LINK_ASLI
+            links = re.findall(r'/url\?q=(https://[^&]+)', raw)
+            # Bersihin & decode
+            clean_links = []
+            for l in links:
+                l = urllib.parse.unquote(l)
+                # Filter cuma ambil yang media Indonesia
+                if any(d in l for d in [".ac.id","detik.com","kompas.com","cnnindonesia.com","tribunnews.com","antaranews.com","liputan6.com","pddikti","sinta","garuda"]):
+                    if "google.com" not in l and "support.google" not in l:
+                        clean_links.append(l)
+            # Hilangin duplikat
+            return list(dict.fromkeys(clean_links))[:15] # ambil 15 teratas aja
+    except:
+        return []
+
+def cek_valid_url(url, query):
+    """Validasi apakah nama beneran ada di dalam halaman hasil Google itu"""
+    try:
+        qlow = query.lower().strip()
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            raw = r.read().decode('utf-8','ignore')
+            low = raw.lower()
+            if any(k in low for k in NO_RESULT): return False
+            
+            clean = re.sub(r'<script.*?</script>',' ',low, flags=re.DOTALL)
+            clean = re.sub(r'<style.*?</style>',' ',clean, flags=re.DOTALL)
+            clean = re.sub(r'<input[^>]*>',' ',clean)
+            for j in JEBAKAN:
+                clean = clean.replace(j,' ')
+
+            if qlow not in clean:
+                return False
+
+            # SKOR VALIDASI
+            score = 0
+            title_match = re.findall(r'<title[^>]*>(.*?)</title>', clean)
+            for t in title_match:
+                if qlow in t.lower():
+                    score += 100 # Paling valid kalau ada di title
+
+            h1h2h3 = re.findall(r'<h[1-3][^>]*>(.*?)</h[1-3]>', clean)
+            for h in h1h2h3:
+                txt = re.sub(r'<.*?>',' ',h).lower()
+                if qlow in txt:
+                    score += 80
+
             links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
-            found_in_link = any(qlow in lt.lower() for lt in links)
-            if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun','sinta','garuda']):
-                if not found_in_link:
-                    headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
-                    for h in headings:
-                        if qlow in h.lower():
-                            found_in_link = True
-                            break
-                if not found_in_link: return False
-            return True
+            for a in links:
+                txt = re.sub(r'<.*?>',' ',a).lower()
+                if qlow in txt:
+                    score += 50
+                    break
+            
+            return score >= 50 # Minimal harus ada di heading/link
     except:
         return False
 
@@ -119,29 +90,29 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Content-type','application/json; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
-        if not q:
+        if not q or is_angka(q):
             self.wfile.write(b'{"results":[]}'); return
-        
-        # GATE UTAMA
-        pddikti_ada = cek_pddikti_gate(q)
-        if not pddikti_ada:
-            self.wfile.write(json.dumps({"query": q, "results": [], "pddikti_status": "NOT_FOUND"}, ensure_ascii=False).encode())
+
+        # 1. Tanya Google dulu: media mana aja yang nyebut nama ini?
+        google_links = get_links_from_google(q)
+
+        if not google_links:
+            self.wfile.write(json.dumps({"query": q, "results": [], "source": "google", "status": "NOT_FOUND_IN_GOOGLE"}, ensure_ascii=False).encode())
             return
 
-        q_plus = urllib.parse.quote_plus(q)
-        q_path = urllib.parse.quote(q)
+        # 2. Validasi satu per satu link hasil Google
         valid = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
-            futs = {}
-            for domain, tpl in TEMPLATES.items():
-                url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                if "pddikti" in domain:
-                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
-                    continue
-                futs[ex.submit(cek_valid, url, q, domain)] = (domain, url)
+            futs = {ex.submit(cek_valid_url, url, q): url for url in google_links}
             for f in concurrent.futures.as_completed(futs):
-                domain, url = futs[f]
+                url = futs[f]
                 if f.result():
-                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
-        
-        self.wfile.write(json.dumps({"query": q, "results": valid, "pddikti_status": "FOUND"}, ensure_ascii=False).encode())
+                    domain = urllib.parse.urlparse(url).netloc
+                    valid.append({
+                        "title": f"{q} di {domain}",
+                        "url": url,
+                        "source": domain,
+                        "valid": True
+                    })
+
+        self.wfile.write(json.dumps({"query": q, "results": valid, "google_found": len(google_links)}, ensure_ascii=False).encode())
