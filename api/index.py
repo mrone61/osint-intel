@@ -1,38 +1,63 @@
 from http.server import BaseHTTPRequestHandler
-import urllib.parse, json, urllib.request, re
+import urllib.parse, json, urllib.request, concurrent.futures
 
-def get_links(q):
-    links=[]
-    for engine in [
-        f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(q)}",
-        f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}&mkt=id-ID",
-        f"https://www.google.com/search?q={urllib.parse.quote_plus(q)}&hl=id&num=20"
-    ]:
-        try:
-            req=urllib.request.Request(engine, headers={"User-Agent":"Mozilla/5.0 Firefox/124"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                txt=r.read().decode('utf-8','ignore')
-                found=re.findall(r'https?://[^\s"<>]+', txt)
-                for u in found:
-                    u=u.split('&')[0].strip('"\');')
-                    if ".id" in u or "detik.com" in u or "kompas.com" in u or "cnnindonesia.com" in u:
-                        if "duckduckgo" not in u and "bing.com" not in u and "google." not in u:
-                            links.append(u)
-        except: pass
-        if len(links)>=5: break
-    return list(dict.fromkeys(links))[:20]
+# List server target langsung
+TARGETS = [
+    "https://www.detik.com/search/searchall?query={}",
+    "https://www.kompas.com/search/{}",
+    "https://www.liputan6.com/search?q={}",
+    "https://www.cnnindonesia.com/search/?query={}",
+    "https://www.tribunnews.com/search?q={}",
+    "https://www.antaranews.com/search/{}",
+    "https://www.kumparan.com/search?q={}",
+    "https://www.tempo.co/search?q={}",
+    "https://jabar.antaranews.com/search?q={}",
+    "https://www.okezone.com/tag/{}",
+    "https://www.sindonews.com/search?q={}",
+    "https://www.merdeka.com/search/{}",
+    "https://www.suara.com/search?q={}",
+    "https://www.viva.co.id/search?q={}",
+    "https://pddikti.kemdiktisaintek.go.id/search/{}",
+    "https://sinta.kemdiktisaintek.go.id/authors?q={}",
+]
+
+def cek_server(url_template, q):
+    url = url_template.format(urllib.parse.quote(q))
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 Chrome/122"})
+        with urllib.request.urlopen(req, timeout=7) as r:
+            html = r.read().decode('utf-8','ignore')
+            # Kalau nama ada di html server itu, anggap valid
+            if q.lower() in html.lower():
+                domain = urllib.parse.urlparse(url).netloc
+                return {"title": f"{q} ditemukan di {domain}", "url": url, "source": domain, "valid": True}
+    except:
+        pass
+    return None
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        qs=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        q=qs.get('q',[''])[0]
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('q',[''])[0].strip()
         self.send_response(200)
-        self.send_header('Content-type','application/json')
+        self.send_header('Content-type','application/json; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
-        if not q:
+        
+        if not q or len(q) < 3:
             self.wfile.write(b'{"results":[]}'); return
-        raw=get_links(q)
-        # Kalau gak ada yang ketemu pun, jangan kosong, kasih hasil mentah biar gak dikira error
-        results=[{"title":f"{q} - {urllib.parse.urlparse(u).netloc}", "url":u, "source":urllib.parse.urlparse(u).netloc, "valid":True} for u in raw]
-        self.wfile.write(json.dumps({"query":q,"results":results,"google_found":len(raw),"engine":"ddg+bing+google"}, ensure_ascii=False).encode())
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as ex:
+            futs = [ex.submit(cek_server, t, q) for t in TARGETS]
+            for f in concurrent.futures.as_completed(futs):
+                try:
+                    res = f.result()
+                    if res: results.append(res)
+                except: pass
+
+        self.wfile.write(json.dumps({
+            "query": q,
+            "results": results,
+            "google_found": len(results),
+            "engine": "direct-shoot-v11"
+        }, ensure_ascii=False).encode())
