@@ -154,13 +154,13 @@ TEMPLATES = {
 "wikipedia.org": "https://id.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results","nothing found","berita tidak ditemukan","pencarian tidak ditemukan","0 hasil"]
+NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results","nothing found","berita tidak ditemukan","pencarian tidak ditemukan","0 hasil","hasil tidak ditemukan"]
 
 def cek_pddikti_gate(query):
     return True
 
 def cek_satu_situs(domain, query):
-    # JEDA 3.5 DETIK - LEGAL & SOPAN 100%
+    # JEDA 3.5 DETIK - LEGAL & SOPAN 100% - ANTI BLOKIR
     time.sleep(random.uniform(3.0, 4.0))
     if domain not in TEMPLATES: return False, ""
     tpl = TEMPLATES[domain]
@@ -168,19 +168,72 @@ def cek_satu_situs(domain, query):
     try:
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 (OSINT-Intel/1.0 - Educational Research - Manado) Chrome/122.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            raw = r.read().decode('utf-8','ignore').lower()
-            if any(k in raw for k in NO_RESULT): return False, url
+            html = r.read().decode('utf-8','ignore')
+            raw_low = html.lower()
+
+            # LAPIS 1: CEK KATA TIDAK DITEMUKAN
+            if any(k in raw_low for k in NO_RESULT):
+                return False, url
             
+            # LAPIS 2: BUANG FOOTER, SCRIPT, COPYRIGHT YANG BIKIN FALSE POSITIVE
+            # Ini kunci biar © 2026 di footer gak kehitung VALID
+            clean = re.sub(r'<script.*?</script>|<style.*?</style>|<footer.*?</footer>|©.*?20\d\d|copyright.*?</div>|all rights reserved', ' ', html, flags=re.I|re.S)
+            clean_low = clean.lower()
+
+            # LAPIS 3: HARUS ADA CONTAINER BERITA / HASIL
+            has_result_container = bool(re.search(r'<article|<h2|<h3|class=".*(title|result|list|item|berita|news|card).*?"', clean_low))
+            # Kalau halaman terlalu pendek dan gak ada container, anggap kosong
+            if not has_result_container and len(clean_low) < 6000 and "search" in raw_low:
+                # Double check, kalau gak ada kata query sama sekali ya false
+                if query.lower() not in clean_low:
+                    return False, url
+
+            # LAPIS 4: VALIDASI KATA BERDEKATAN (ANTI MENCAR)
             query_lower = query.lower()
-            parts = query_lower.split()
-            match_count = sum(1 for p in parts if len(p) > 2 and p in raw)
+            parts = [p for p in query_lower.split() if len(p) > 2]
             
-            if query_lower in raw:
+            if len(parts) == 0:
+                return False, url
+
+            # Query 1 kata harus muncul minimal 2x di konten bersih
+            if len(parts) == 1:
+                if clean_low.count(parts[0]) >= 2:
+                    return True, url
+                # Kalau cuma 1x tapi ada di judul, tetap valid
+                if re.search(r'<h[2-3][^>]*>.*?' + re.escape(parts[0]), clean_low):
+                    return True, url
+                return False, url
+
+            # Query multi kata: cek apakah kata-kata berdekatan dalam 150 karakter
+            # Contoh: "Rudi Manado" -> harus ada "Rudi ....(max 150 char)... Manado"
+            found_near = 0
+            for i in range(len(parts)-1):
+                pattern = re.escape(parts[i]) + r".{0,150}?" + re.escape(parts[i+1])
+                if re.search(pattern, clean_low):
+                    found_near += 1
+                # Cek balik juga Manado...Rudi
+                pattern_rev = re.escape(parts[i+1]) + r".{0,150}?" + re.escape(parts[i])
+                if re.search(pattern_rev, clean_low):
+                    found_near += 1
+
+            # Jika query mengandung tanggal lengkap "26 Oktober 2026"
+            if re.search(r'\d{1,2}\s+\w+\s+20\d{2}', query_lower):
+                if query_lower in clean_low:
+                    return True, url
+                if found_near >= 1:
+                    return True, url
+                return False, url
+
+            # Final decision
+            if query_lower in clean_low:
                 return True, url
-            if match_count >= 2 or (len(parts) == 2 and match_count == 2):
+            if len(parts) == 2 and found_near >= 1:
                 return True, url
-            if len(parts) == 1 and parts[0] in raw:
+            if len(parts) == 3 and found_near >= 2:
                 return True, url
+            if len(parts) > 3 and found_near >= 2:
+                return True, url
+
             return False, url
     except Exception as e:
         return False, url
