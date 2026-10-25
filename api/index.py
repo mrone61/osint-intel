@@ -25,108 +25,157 @@ TEMPLATES = {
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-FORCE_ALWAYS = [] # KOSONGKAN, SEMUA WAJIB VALIDASI KETAT
-
-NO_RESULT_PHRASES = [
+NO_RESULT = [
 "tidak ditemukan","tidak ada hasil","data tidak ditemukan",
 "no results found","0 results","nothing found","no posts found",
 "pencarian tidak ditemukan","berita tidak ditemukan","tidak ada artikel",
 "tidak ada yang cocok","hasil tidak ditemukan","maaf, tidak ada",
 "your search -","did not match any documents","tidak ada yang ditemukan",
-"maaf, tidak ada hasil","sorry, but nothing matched","no results matching"
+"sorry, but nothing matched","oops","artikel tidak ditemukan","belum ada artikel",
+"tidak ada berita","pencarian anda tidak ditemukan"
 ]
 
-def cek_pddikti_valid(query):
-    try:
-        q_plus = urllib.parse.quote_plus(query)
-        api_url = f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}"
-        req = urllib.request.Request(api_url, headers={
-            "User-Agent": "Mozilla/5.0",
-            "Referer": "https://pddikti.kemdiktisaintek.go.id/",
-            "Accept": "application/json"
-        })
-        with urllib.request.urlopen(req, timeout=8) as r:
-            raw = r.read().decode('utf-8', errors='ignore')
-            if '"total":0' in raw or '"data":[]' in raw or raw.strip() == '[]' or len(raw) < 60:
-                return False
-            if query.lower() in raw.lower():
+def cek_pddikti_comprehensive(query):
+    """Cek Mahasiswa + Dosen sekaligus"""
+    q_plus = urllib.parse.quote_plus(query)
+    endpoints = [
+        f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}",
+        f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?keyword={q_plus}",
+        f"https://pddikti.kemdiktisaintek.go.id/api/search/ptk?keyword={q_plus}",
+    ]
+    for api_url in endpoints:
+        try:
+            req = urllib.request.Request(api_url, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://pddikti.kemdiktisaintek.go.id/",
+                "Accept": "application/json"
+            })
+            with urllib.request.urlopen(req, timeout=8) as r:
+                raw = r.read().decode('utf-8', errors='ignore').lower()
+                if '"total":0' in raw or '"data":[]' in raw or raw.strip() == '[]':
+                    continue
+                # Kalau ada data dan nama cocok
+                if query.lower() in raw and len(raw) > 100:
+                    return True
+        except:
+            continue
+    return False
+
+def cek_youtube_valid(low, qlow):
+    # YouTube render via ytInitialData JSON
+    # Harus ada videoRenderer dan judul mengandung query
+    if "ytInitialData" not in low:
+        return False
+    # Cari judul video di JSON
+    titles = re.findall(r'"title":\{"runs":\[\{"text":"(.*?)"', low)
+    if not titles:
+        titles = re.findall(r'"title":{"simpleText":"(.*?)"', low)
+    # Kalau tidak ada video sama sekali = invalid
+    if len(titles) == 0:
+        return False
+    # Harus ada minimal 1 judul yang mengandung kata kunci (bukan angka ngarang)
+    for t in titles[:10]: # cek 10 teratas
+        if qlow in t.lower() or all(word in t.lower() for word in qlow.split() if len(word) > 2):
+            return True
+    # Untuk angka ngarang 1029393, judul video tidak akan mengandung itu = return False
+    return False
+
+def cek_berita_valid(low, qlow, domain):
+    # Hapus header jebakan
+    temp = re.sub(r'<title.*?</title>', ' ', low, flags=re.DOTALL)
+    temp = re.sub(r'search.*?for[^<]*', ' ', temp)
+    temp = re.sub(r'pencarian.*?untuk[^<]*', ' ', temp)
+    
+    # Cek frasa gagal dulu
+    for phrase in NO_RESULT:
+        if phrase in low:
+            # Tapi pastikan frasa gagal itu bukan bagian dari artikel yang memang mengandung query
+            # Kalau ada frasa gagal = langsung invalid
+            if "tidak ditemukan" in low or "no results" in low or "nothing found" in low or "oops" in low:
+                # Double check: apakah ada artikel dengan query?
+                articles = re.findall(r'<h3[^>]*>(.*?)</h3>|<h2[^>]*>(.*?)</h2>', low, flags=re.DOTALL)
+                found = False
+                for a in articles:
+                    txt = ''.join(a).lower()
+                    if qlow in txt and len(txt) > 10 and 'search' not in txt and 'pencarian' not in txt:
+                        found = True
+                        break
+                if not found:
+                    return False
+
+    # Parser khusus per domain
+    if "cnnindonesia" in domain:
+        # CNN struktur: <h3 class="...">Judul Artikel</h3>
+        hits = re.findall(r'<article.*?</article>', low, flags=re.DOTALL)
+        for h in hits:
+            if qlow in h.lower():
                 return True
-            return False
-    except:
+        return False
+    
+    if "tribunnews" in domain:
+        hits = re.findall(r'<h3.*?</h3>', low, flags=re.DOTALL)
+        for h in hits:
+            clean_h = re.sub(r'<.*?>', ' ', h).lower()
+            if qlow in clean_h and len(clean_h) > 15:
+                return True
         return False
 
-def cek_google_valid(low_text, qlow):
-    # Google kalau zonk ada frasa ini
-    if "did not match any documents" in low_text or "tidak menemukan hasil" in low_text or "no results found" in low_text:
+    if "detik.com" in domain or "kompas.com" in domain:
+        hits = re.findall(r'<article.*?</article>|<h3.*?</h3>|<h2.*?</h2>', low, flags=re.DOTALL)
+        for h in hits:
+            clean_h = re.sub(r'<.*?>', ' ', h).lower()
+            if qlow in clean_h and 'search' not in clean_h and 'pencarian' not in clean_h:
+                return True
         return False
-    # Kalau cuma ada di search box, bukan hasil
-    if f'id="result-stats"' not in low_text and 'id="search"' not in low_text and 'data-ved' not in low_text:
-        # Google blokir bot / captcha
-        return False
-    return True
+
+    return False
 
 def cek_valid(url, query, domain):
+    qlow = query.lower().strip()
     if "pddikti" in domain:
-        return cek_pddikti_valid(query)
+        return cek_pddikti_comprehensive(query)
+
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urllib.request.urlopen(req, timeout=7) as r:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+        with urllib.request.urlopen(req, timeout=8) as r:
             raw = r.read().decode('utf-8', errors='ignore')
             low = raw.lower()
-            qlow = query.lower().strip()
 
-            # 1. Cek frasa gagal dulu (paling penting)
-            for phrase in NO_RESULT_PHRASES:
+            if "youtube.com" in domain:
+                return cek_youtube_valid(low, qlow)
+
+            if any(x in domain for x in ["cnnindonesia", "tribunnews", "detik.com", "kompas.com"]):
+                return cek_berita_valid(low, qlow, domain)
+
+            # Untuk kampus .ac.id + sinta + garuda
+            for phrase in NO_RESULT:
                 if phrase in low:
                     return False
 
-            # 2. Bersihkan jebakan search header
-            # Hapus semua "Search Results for: Manfret Nando Kambu"
-            clean_for_check = re.sub(r'search results for[^<]{0,100}', ' ', low)
-            clean_for_check = re.sub(r'hasil pencarian untuk[^<]{0,100}', ' ', clean_for_check)
-            clean_for_check = re.sub(r'search result for[^<]{0,100}', ' ', clean_for_check)
-            clean_for_check = re.sub(r'<title.*?</title>', ' ', clean_for_check, flags=re.DOTALL)
-            clean_for_check = re.sub(r'<input[^>]*>', ' ', clean_for_check)
-
-            if qlow not in clean_for_check:
-                return False
-
-            # 3. Validasi khusus Google
-            if "google.com" in domain:
-                return cek_google_valid(low, qlow)
-
-            # 4. Validasi ketat untuk kampus & berita
-            # Harus ada di dalam <a> atau <article> atau <h2>/h3 yang BUKAN header search
+            # Harus ada di article/link/h2 yang real, bukan header search
             articles = re.findall(r'<article[^>]*>(.*?)</article>', low, flags=re.DOTALL)
-            links = re.findall(r'<a[^>]*>(.*?)</a>', low, flags=re.DOTALL)
-            headings = re.findall(r'<h2[^>]*>(.*?)</h2>|<h3[^>]*>(.*?)</h3>', low, flags=re.DOTALL)
+            links = re.findall(r'<a[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</a>|<a[^>]*class="[^"]*entry[^"]*"[^>]*>(.*?)</a>|<h2[^>]*>(.*?)</h2>|<h3[^>]*>(.*?)</h3>', low, flags=re.DOTALL)
             
-            # Gabungkan semua konten yang dianggap hasil
-            real_results = []
-            for a in articles:
-                real_results.append(a)
-            for l in links:
-                # Abaikan link menu/navigasi pendek
-                if len(l.strip()) > 10:
-                    real_results.append(l)
-            for h in headings:
-                # h adalah tuple karena ada 2 grup
-                text = ''.join(h)
-                if 'search results for' not in text and 'hasil pencarian' not in text:
-                    real_results.append(text)
-
-            found_real = False
-            for res in real_results:
-                if qlow in res.lower():
-                    found_real = True
+            found = False
+            for block in articles:
+                clean = re.sub(r'<.*?>', ' ', block).lower()
+                if qlow in clean and len(clean) > 20 and 'search results for' not in clean:
+                    found = True
                     break
             
-            if domain.endswith('.ac.id') or 'sinta' in domain or 'garuda' in domain:
-                return found_real
+            if not found:
+                for group in links:
+                    for txt in group:
+                        clean = re.sub(r'<.*?>', ' ', txt).lower().strip()
+                        if qlow in clean and len(clean) > 10 and 'search' not in clean and 'hasil pencarian' not in clean:
+                            found = True
+                            break
+                    if found:
+                        break
             
-            return found_real or (qlow in clean_for_check)
+            return found
 
-    except Exception:
+    except Exception as e:
         return False
 
 class handler(BaseHTTPRequestHandler):
