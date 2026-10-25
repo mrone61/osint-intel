@@ -25,8 +25,7 @@ TEMPLATES = {
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-
-FORCE_ALWAYS = ["pddikti.kemdiktisaintek.go.id", "google.com"]
+FORCE_ALWAYS = ["google.com"] # PDDIKTI DIHAPUS DARI SINI
 
 NO_RESULT = [
 "tidak ditemukan","tidak ada hasil","data tidak ditemukan",
@@ -35,12 +34,44 @@ NO_RESULT = [
 "tidak ada yang cocok","hasil tidak ditemukan","maaf, tidak ada"
 ]
 
-JEBAKAN_SEARCH = [
-"hasil pencarian untuk","search results for","search result for",
-"hasil cari","pencarian untuk","menampilkan hasil untuk"
-]
+def cek_pddikti_valid(query):
+    # PDDIKTI validasi via API frontend-nya, bukan HTML search-nya
+    try:
+        q_plus = urllib.parse.quote_plus(query)
+        # Ini endpoint search mahasiswa yang dipakai frontend PDDIKTI
+        api_url = f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}"
+        req = urllib.request.Request(api_url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://pddikti.kemdiktisaintek.go.id/",
+            "Accept": "application/json"
+        })
+        with urllib.request.urlopen(req, timeout=8) as r:
+            raw = r.read().decode('utf-8', errors='ignore')
+            # Kalau API return array kosong atau count 0 = tidak valid
+            if '"total":0' in raw or '"data":[]' in raw or raw.strip() == '[]' or len(raw) < 50:
+                return False
+            # Kalau nama ada di json response = valid
+            if query.lower() in raw.lower():
+                return True
+            return False
+    except:
+        # Fallback: coba endpoint kedua (versi lama)
+        try:
+            api_url2 = f"https://api-frontend.kemdikbud.go.id/search_mhs/{urllib.parse.quote(query)}"
+            req2 = urllib.request.Request(api_url2, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req2, timeout=8) as r2:
+                raw2 = r2.read().decode('utf-8', errors='ignore')
+                if query.lower() in raw2.lower() and len(raw2) > 100:
+                    return True
+            return False
+        except:
+            return False
 
 def cek_valid(url, query, domain):
+    # Handler khusus PDDIKTI
+    if "pddikti" in domain:
+        return cek_pddikti_valid(query)
+
     if domain in FORCE_ALWAYS:
         return True
     try:
@@ -54,49 +85,30 @@ def cek_valid(url, query, domain):
                 if k in low:
                     return False
 
+            # Bersihkan tag yang mengecoh
             clean = re.sub(r'<input[^>]*>', ' ', low)
             clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
             clean = re.sub(r'<meta[^>]*>', ' ', clean)
             clean = re.sub(r'<script.*?</script>', ' ', clean, flags=re.DOTALL)
             clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
 
-            
-            for j in JEBAKAN_SEARCH:
-                
-                clean = clean.replace(f"{j}: {qlow}", " ")
-                clean = clean.replace(f"{j} {qlow}", " ")
-                clean = clean.replace(f"{j}:", " ")
-                clean = clean.replace(j, " ")
-
-            clean = clean.replace(f'"{qlow}"', ' ')
-            clean = clean.replace(f"'{qlow}'", ' ')
-
-            
             if qlow not in clean:
                 return False
 
-            
+            # Validasi ketat untuk portal berita & kampus
             links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
-            found_in_link = False
-            for link_text in links:
-                if qlow in link_text.lower():
-                    found_in_link = True
-                    break
+            found_in_link = any(qlow in lt.lower() for lt in links if lt.strip())
             
-            
-            if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun']):
-                if not found_in_link:
-                    
-                    headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
-                    for h in headings:
-                        if qlow in h.lower():
-                            found_in_link = True
-                            break
+            if not found_in_link:
+                headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
+                found_in_link = any(qlow in h.lower() for h in headings)
+
+            if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun','sinta','garuda']):
                 if not found_in_link:
                     return False
 
             return True
-    except Exception as e:
+    except Exception:
         return False
 
 class handler(BaseHTTPRequestHandler):
