@@ -1,13 +1,8 @@
 from http.server import BaseHTTPRequestHandler
-import urllib.parse, json, urllib.request, concurrent.futures, re
+import urllib.parse, json, urllib.request, re, time, random
 
+# === TOTAL 126+ SITUS SABANG-MERAUKE - LENGKAP ===
 TEMPLATES = {
-# --- AKADEMIK ---
-"pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
-"sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
-"garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
-
-# --- NASIONAL SUPER ---
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
 "kompasiana.com": "https://www.kompasiana.com/search?q={q_plus}",
@@ -43,8 +38,14 @@ TEMPLATES = {
 "akurat.co": "https://www.akurat.co/search?q={q_plus}",
 "mongabay.co.id": "https://www.mongabay.co.id/search/?s={q_plus}",
 "narasi.tv": "https://www.narasi.tv/search?q={q_plus}",
-
-# --- TRIBUN NETWORK SABANG - MERAUKE ---
+"pikiran-rakyat.com": "https://www.pikiran-rakyat.com/search?q={q_plus}",
+"rmol.id": "https://www.rmol.id/search?q={q_plus}",
+"inilah.com": "https://www.inilah.com/search?q={q_plus}",
+"wartaekonomi.co.id": "https://www.wartaekonomi.co.id/search?q={q_plus}",
+"era.id": "https://www.era.id/search?q={q_plus}",
+"bloombergtechnoz.com": "https://www.bloombergtechnoz.com/search?q={q_plus}",
+"disway.id": "https://www.disway.id/search?q={q_plus}",
+# TRIBUN NETWORK SABANG - MERAUKE
 "aceh.tribunnews.com": "https://aceh.tribunnews.com/search?q={q_plus}",
 "medan.tribunnews.com": "https://medan.tribunnews.com/search?q={q_plus}",
 "batam.tribunnews.com": "https://batam.tribunnews.com/search?q={q_plus}",
@@ -74,8 +75,7 @@ TEMPLATES = {
 "ternate.tribunnews.com": "https://ternate.tribunnews.com/search?q={q_plus}",
 "papua.tribunnews.com": "https://papua.tribunnews.com/search?q={q_plus}",
 "sorong.tribunnews.com": "https://sorong.tribunnews.com/search?q={q_plus}",
-
-# --- JAWA POS / RADAR NETWORK ---
+# JAWA POS / RADAR NETWORK
 "radar-bali.jawapos.com": "https://radar-bali.jawapos.com/search?q={q_plus}",
 "radarjogja.jawapos.com": "https://radarjogja.jawapos.com/search?q={q_plus}",
 "radarsolo.jawapos.com": "https://radarsolo.jawapos.com/search?q={q_plus}",
@@ -85,24 +85,11 @@ TEMPLATES = {
 "radar-bogor.jawapos.com": "https://radar-bogor.jawapos.com/search?q={q_plus}",
 "radar-cirebon.jawapos.com": "https://radarcirebon.jawapos.com/search?q={q_plus}",
 "radar-madura.jawapos.com": "https://radar-madura.jawapos.com/search?q={q_plus}",
-
-# --- REGIONAL SULAWESI & INDONESIA TIMUR ---
-"herald.id": "https://www.herald.id/search?q={q_plus}",
-"fajar.co.id": "https://www.fajar.co.id/search?q={q_plus}",
-"saibetik.com": "https://www.saibetik.com/search?q={q_plus}",
-"lintas-sulut.com": "https://www.lintas-sulut.com/search?q={q_plus}",
 "manadopost.jawapos.com": "https://manadopost.jawapos.com/search?q={q_plus}",
 "bmanado.com": "https://www.bmanado.com/search?q={q_plus}",
 "detiksulut.com": "https://www.detiksulut.com/search?q={q_plus}",
 "sulut.inews.id": "https://sulut.inews.id/search?q={q_plus}",
-"sulut.antaranews.com": "https://sulut.antaranews.com/search?q={q_plus}",
-"gorontalo.antaranews.com": "https://gorontalo.antaranews.com/search?q={q_plus}",
-"sulsel.antaranews.com": "https://sulsel.antaranews.com/search?q={q_plus}",
-"sulteng.antaranews.com": "https://sulteng.antaranews.com/search?q={q_plus}",
-"sultra.antaranews.com": "https://sultra.antaranews.com/search?q={q_plus}",
-"maluku.antaranews.com": "https://maluku.antaranews.com/search?q={q_plus}",
-"papua.antaranews.com": "https://papua.antaranews.com/search?q={q_plus}",
-"papuabarat.antaranews.com": "https://papuabarat.antaranews.com/search?q={q_plus}",
+# ANTARA REGIONAL LENGKAP
 "aceh.antaranews.com": "https://aceh.antaranews.com/search?q={q_plus}",
 "sumut.antaranews.com": "https://sumut.antaranews.com/search?q={q_plus}",
 "riau.antaranews.com": "https://riau.antaranews.com/search?q={q_plus}",
@@ -113,93 +100,92 @@ TEMPLATES = {
 "ntt.antaranews.com": "https://ntt.antaranews.com/search?q={q_plus}",
 "kalbar.antaranews.com": "https://kalbar.antaranews.com/search?q={q_plus}",
 "kaltim.antaranews.com": "https://kaltim.antaranews.com/search?q={q_plus}",
-
-# --- LAINNYA ---
-"pikiran-rakyat.com": "https://www.pikiran-rakyat.com/search?q={q_plus}",
-"rmol.id": "https://www.rmol.id/search?q={q_plus}",
-"inilah.com": "https://www.inilah.com/search?q={q_plus}",
-"wartaekonomi.co.id": "https://www.wartaekonomi.co.id/search?q={q_plus}",
-"era.id": "https://www.era.id/search?q={q_plus}",
-"bloombergtechnoz.com": "https://www.bloombergtechnoz.com/search?q={q_plus}",
-"disway.id": "https://www.disway.id/search?q={q_plus}",
+"sulut.antaranews.com": "https://sulut.antaranews.com/search?q={q_plus}",
+"sulsel.antaranews.com": "https://sulsel.antaranews.com/search?q={q_plus}",
+"sulteng.antaranews.com": "https://sulteng.antaranews.com/search?q={q_plus}",
+"sultra.antaranews.com": "https://sultra.antaranews.com/search?q={q_plus}",
+"maluku.antaranews.com": "https://maluku.antaranews.com/search?q={q_plus}",
+"papua.antaranews.com": "https://papua.antaranews.com/search?q={q_plus}",
+"papuabarat.antaranews.com": "https://papuabarat.antaranews.com/search?q={q_plus}",
+"gorontalo.antaranews.com": "https://gorontalo.antaranews.com/search?q={q_plus}",
+"sumbar.antaranews.com": "https://sumbar.antaranews.com/search?q={q_plus}",
+"jambi.antaranews.com": "https://jambi.antaranews.com/search?q={q_plus}",
+"sumsel.antaranews.com": "https://sumsel.antaranews.com/search?q={q_plus}",
+"bengkulu.antaranews.com": "https://bengkulu.antaranews.com/search?q={q_plus}",
+"lampung.antaranews.com": "https://lampung.antaranews.com/search?q={q_plus}",
+"babel.antaranews.com": "https://babel.antaranews.com/search?q={q_plus}",
+"kepri.antaranews.com": "https://kepri.antaranews.com/search?q={q_plus}",
+"jateng.antaranews.com": "https://jateng.antaranews.com/search?q={q_plus}",
+"jogja.antaranews.com": "https://jogja.antaranews.com/search?q={q_plus}",
+"kalsel.antaranews.com": "https://kalsel.antaranews.com/search?q={q_plus}",
+"kaltara.antaranews.com": "https://kaltara.antaranews.com/search?q={q_plus}",
+"malut.antaranews.com": "https://malut.antaranews.com/search?q={q_plus}",
+# REGIONAL TIMUR
+"herald.id": "https://www.herald.id/search?q={q_plus}",
+"fajar.co.id": "https://www.fajar.co.id/search?q={q_plus}",
+"saibetik.com": "https://www.saibetik.com/search?q={q_plus}",
+"lintas-sulut.com": "https://www.lintas-sulut.com/search?q={q_plus}",
+# AKADEMIK + LAIN
+"pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
+"sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
+"garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
 "youtube.com": "https://www.youtube.com/results?search_query={q_plus}",
 "wikipedia.org": "https://id.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","no posts found","pencarian tidak ditemukan","berita tidak ditemukan","hasil tidak ditemukan","did not match any documents"]
-JEBAKAN_SEARCH = ["hasil pencarian untuk","search results for","hasil cari","pencarian untuk"]
+NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","berita tidak ditemukan"]
 
-def is_angka(q): return q.strip().isdigit()
 def cek_pddikti_gate(query):
-    if is_angka(query): return False
     q_plus = urllib.parse.quote_plus(query)
-    endpoints = [
-        f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?keyword={q_plus}",
-        f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
-    ]
-    for api_url in endpoints:
-        try:
-            req = urllib.request.Request(api_url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://pddikti.kemdiktisaintek.go.id/"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                raw = r.read().decode('utf-8','ignore')
-                low = raw.lower()
-                if len(raw)<100: continue
-                if '"total":0' in low or '"data":[]' in low: continue
-                if any(k in low for k in NO_RESULT): continue
-                if query.lower().split()[0] in low and query.lower().split()[-1] in low: return True
-        except: continue
     try:
-        url = f"https://www.google.com/search?q={q_plus}+site%3Asinta.kemdiktisaintek.go.id+OR+site%3Apddikti.kemdiktisaintek.go.id"
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        req = urllib.request.Request(f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}", headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
             raw = r.read().decode('utf-8','ignore').lower()
-            if "sinta.kemdiktisaintek.go.id" in raw or "pddikti.kemdiktisaintek.go.id" in raw: return True
+            if query.lower().split()[0] in raw and query.lower().split()[-1] in raw: return True
     except: pass
     return False
 
-def cek_valid(url, query, domain):
+def cek_satu_situs(domain, query):
+    time.sleep(random.uniform(1, 2))  # JEDA 1-2 DETIK ANTI DDOS TAPI LOLOS VERCEL 10 DETIK
+    if domain not in TEMPLATES: return False, ""
+    tpl = TEMPLATES[domain]
+    url = tpl.replace("{q_plus}", urllib.parse.quote_plus(query)).replace("{q_path}", urllib.parse.quote(query))
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=6) as r:
-            raw = r.read().decode('utf-8', errors='ignore').lower()
-            qlow = query.lower().strip()
-            for k in NO_RESULT:
-                if k in raw: return False
-            clean = re.sub(r'<script.*?</script>', ' ', raw, flags=re.DOTALL)
-            clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
-            for j in JEBAKAN_SEARCH:
-                clean = clean.replace(f"{j}: {qlow}", " ").replace(f"{j} {qlow}", " ").replace(j, " ")
-            if qlow not in clean: return False
-            links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
-            if not any(qlow in lt.lower() for lt in links):
-                h = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
-                if not any(qlow in x.lower() for x in h): return False
-            return True
-    except: return False
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 Chrome/122.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            raw = r.read().decode('utf-8','ignore').lower()
+            if any(k in raw for k in NO_RESULT): return False, url
+            if query.lower() not in raw: return False, url
+            return True, url
+    except:
+        return False, url
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('q',[''])[0].strip()
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        q = qs.get('q',[''])[0].strip()
+        domain = qs.get('domain',[''])[0].strip()
+
         self.send_response(200)
         self.send_header('Content-type','application/json; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
+
         if not q:
-            self.wfile.write(b'{"results":[]}'); return
+            self.wfile.write(b'{"pddikti_status":"NOT_FOUND"}'); return
+
+        # MODE 1: CEK SATU DOMAIN (untuk progress bar)
+        if domain:
+            valid, url = cek_satu_situs(domain, q)
+            self.wfile.write(json.dumps({"valid":valid,"domain":domain,"url":url,"title":f"{q} di {domain}"}, ensure_ascii=False).encode())
+            return
+
+        # MODE 2: CEK PDDIKTI + KASIH LIST 126 DOMAIN
         if not cek_pddikti_gate(q):
-            self.wfile.write(json.dumps({"query": q, "results": [], "pddikti_status": "NOT_FOUND"}, ensure_ascii=False).encode()); return
-        q_plus = urllib.parse.quote_plus(q)
-        q_path = urllib.parse.quote(q)
-        valid = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=25) as ex:
-            futs = {}
-            for domain, tpl in TEMPLATES.items():
-                url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
-                if "pddikti" in domain:
-                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True}); continue
-                futs[ex.submit(cek_valid, url, q, domain)] = (domain, url)
-            for f in concurrent.futures.as_completed(futs):
-                domain, url = futs[f]
-                if f.result():
-                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
-        self.wfile.write(json.dumps({"query": q, "results": valid, "pddikti_status": "FOUND"}, ensure_ascii=False).encode())
+            self.wfile.write(json.dumps({"pddikti_status":"NOT_FOUND","total":0,"domains":[]}, ensure_ascii=False).encode()); return
+        
+        domains = list(TEMPLATES.keys())
+        # filter pddikti biar gak ikut di progress
+        domains = [d for d in domains if "pddikti" not in d and "sinta" not in d]
+        self.wfile.write(json.dumps({"pddikti_status":"FOUND","query":q,"total":len(domains),"domains":domains}, ensure_ascii=False).encode())
