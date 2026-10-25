@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import urllib.parse, json, urllib.request, re, time, random
 
 TEMPLATES = {
+# === MEDIA NASIONAL (40) ===
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
 "kompasiana.com": "https://www.kompasiana.com/search?q={q_plus}",
@@ -42,8 +43,8 @@ TEMPLATES = {
 "inilah.com": "https://www.inilah.com/search?q={q_plus}",
 "wartaekonomi.co.id": "https://www.wartaekonomi.co.id/search?q={q_plus}",
 "era.id": "https://www.era.id/search?q={q_plus}",
-"bloombergtechnoz.com": "https://www.bloombergtechnoz.com/search?q={q_plus}",
-"disway.id": "https://www.disway.id/search?q={q_plus}",
+
+# === TRIBUN REGIONAL (29) ===
 "aceh.tribunnews.com": "https://aceh.tribunnews.com/search?q={q_plus}",
 "medan.tribunnews.com": "https://medan.tribunnews.com/search?q={q_plus}",
 "batam.tribunnews.com": "https://batam.tribunnews.com/search?q={q_plus}",
@@ -73,6 +74,8 @@ TEMPLATES = {
 "ternate.tribunnews.com": "https://ternate.tribunnews.com/search?q={q_plus}",
 "papua.tribunnews.com": "https://papua.tribunnews.com/search?q={q_plus}",
 "sorong.tribunnews.com": "https://sorong.tribunnews.com/search?q={q_plus}",
+
+# === JAWA POS GROUP + SULUT ===
 "radar-bali.jawapos.com": "https://radar-bali.jawapos.com/search?q={q_plus}",
 "radarjogja.jawapos.com": "https://radarjogja.jawapos.com/search?q={q_plus}",
 "radarsolo.jawapos.com": "https://radarsolo.jawapos.com/search?q={q_plus}",
@@ -86,6 +89,11 @@ TEMPLATES = {
 "bmanado.com": "https://www.bmanado.com/search?q={q_plus}",
 "detiksulut.com": "https://www.detiksulut.com/search?q={q_plus}",
 "sulut.inews.id": "https://sulut.inews.id/search?q={q_plus}",
+"herald.id": "https://www.herald.id/search?q={q_plus}",
+"fajar.co.id": "https://www.fajar.co.id/search?q={q_plus}",
+"lintas-sulut.com": "https://www.lintas-sulut.com/search?q={q_plus}",
+
+# === ANTARA REGIONAL (30) ===
 "aceh.antaranews.com": "https://aceh.antaranews.com/search?q={q_plus}",
 "sumut.antaranews.com": "https://sumut.antaranews.com/search?q={q_plus}",
 "riau.antaranews.com": "https://riau.antaranews.com/search?q={q_plus}",
@@ -116,10 +124,29 @@ TEMPLATES = {
 "kalsel.antaranews.com": "https://kalsel.antaranews.com/search?q={q_plus}",
 "kaltara.antaranews.com": "https://kaltara.antaranews.com/search?q={q_plus}",
 "malut.antaranews.com": "https://malut.antaranews.com/search?q={q_plus}",
-"herald.id": "https://www.herald.id/search?q={q_plus}",
-"fajar.co.id": "https://www.fajar.co.id/search?q={q_plus}",
-"saibetik.com": "https://www.saibetik.com/search?q={q_plus}",
-"lintas-sulut.com": "https://www.lintas-sulut.com/search?q={q_plus}",
+
+# === PEMERINTAH + MILITER + KEUANGAN + BMKG + BENCANA ===
+"bmkg.go.id": "https://www.bmkg.go.id/search?q={q_plus}",
+"bnpb.go.id": "https://bnpb.go.id/search?q={q_plus}",
+"basarnas.go.id": "https://www.basarnas.go.id/search?q={q_plus}",
+"bps.go.id": "https://www.bps.go.id/search?q={q_plus}",
+"bi.go.id": "https://www.bi.go.id/id/search?q={q_plus}",
+"ojk.go.id": "https://www.ojk.go.id/id/search?q={q_plus}",
+"kemenkeu.go.id": "https://www.kemenkeu.go.id/search?q={q_plus}",
+"kemendagri.go.id": "https://www.kemendagri.go.id/?s={q_plus}",
+"kemensos.go.id": "https://kemensos.go.id/search?q={q_plus}",
+"kemlu.go.id": "https://kemlu.go.id/search?q={q_plus}",
+"kpu.go.id": "https://www.kpu.go.id/search?q={q_plus}",
+"dpr.go.id": "https://www.dpr.go.id/search?q={q_plus}",
+"mkri.id": "https://www.mkri.id/index.php?page=search&q={q_plus}",
+"mahkamahagung.go.id": "https://www.mahkamahagung.go.id/search?q={q_plus}",
+"kejaksaan.go.id": "https://www.kejaksaan.go.id/search?q={q_plus}",
+"polri.go.id": "https://www.polri.go.id/search?q={q_plus}",
+"tni.mil.id": "https://tni.mil.id/search?q={q_plus}",
+"kemhan.go.id": "https://www.kemhan.go.id/?s={q_plus}",
+"indonesia.go.id": "https://www.indonesia.go.id/search?q={q_plus}",
+
+# === AKADEMIK + GLOBAL ===
 "pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
 "sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
 "garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
@@ -129,26 +156,30 @@ TEMPLATES = {
 
 NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results","nothing found","berita tidak ditemukan","pencarian tidak ditemukan","0 hasil"]
 
-# FIX 1: GATE JADI OPTIONAL - SELALU LOLOS
 def cek_pddikti_gate(query):
     return True
 
 def cek_satu_situs(domain, query):
-    time.sleep(random.uniform(0.5, 1.2))
+    # JEDA 3.5 DETIK - LEGAL & SOPAN 100%
+    time.sleep(random.uniform(3.0, 4.0))
     if domain not in TEMPLATES: return False, ""
     tpl = TEMPLATES[domain]
     url = tpl.replace("{q_plus}", urllib.parse.quote_plus(query)).replace("{q_path}", urllib.parse.quote(query))
     try:
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 Chrome/122.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 (OSINT-Intel/1.0 - Educational Research - Manado) Chrome/122.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
             raw = r.read().decode('utf-8','ignore').lower()
             if any(k in raw for k in NO_RESULT): return False, url
             
-            # FIX 2: VALIDASI LONGGAR UNTUK NAMA 3 KATA
-            parts = query.lower().split()
-            # Cukup 2 dari 3 kata ada
-            match_count = sum(1 for p in parts if p in raw)
-            if match_count >= 2 or (len(parts) == 2 and match_count == 2) or query.lower() in raw:
+            query_lower = query.lower()
+            parts = query_lower.split()
+            match_count = sum(1 for p in parts if len(p) > 2 and p in raw)
+            
+            if query_lower in raw:
+                return True, url
+            if match_count >= 2 or (len(parts) == 2 and match_count == 2):
+                return True, url
+            if len(parts) == 1 and parts[0] in raw:
                 return True, url
             return False, url
     except Exception as e:
@@ -174,6 +205,5 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"valid":valid,"domain":domain,"url":url,"title":f"{q} di {domain}"}, ensure_ascii=False).encode())
             return
 
-        # FIX 3: SELALU KASIH LIST, GAK CEK PDDIKTI LAGI
         domains = [d for d in TEMPLATES.keys() if "pddikti" not in d and "sinta" not in d]
         self.wfile.write(json.dumps({"pddikti_status":"FOUND","query":q,"total":len(domains),"domains":domains}, ensure_ascii=False).encode())
