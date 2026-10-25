@@ -1,20 +1,17 @@
 from http.server import BaseHTTPRequestHandler
 import urllib.parse, json, urllib.request, concurrent.futures, re
 
-TEMPLATES_GOOGLE = {
-    "google.com": "https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Adetik.com+OR+site%3Akompas.com+OR+site%3Acnnindonesia.com+OR+site%3Atribunnews.com+OR+site%3Aantaranews.com+OR+site%3Aliputan6.com+OR+site%3Apddikti.kemdiktisaintek.go.id"
-}
-
 NO_RESULT = ["did not match any documents","tidak menemukan","no results found","tidak ditemukan","tidak ada hasil"]
 JEBAKAN = ["search results for","hasil pencarian untuk"]
 
 def is_angka(q): return q.strip().isdigit()
 
 def get_links_from_google(query):
-    """Ambil semua link media yang Google temukan"""
+    """Ambil semua link dari SELURUH website Indonesia (.id)"""
     if is_angka(query): return []
-    q_plus = urllib.parse.quote_plus(query)
-    url = f"https://www.google.com/search?q={q_plus}+site%3Aac.id+OR+site%3Adetik.com+OR+site%3Akompas.com+OR+site%3Acnnindonesia.com+OR+site%3Atribunnews.com+OR+site%3Aantaranews.com+OR+site%3Aliputan6.com+OR+site%3Apddikti.kemdiktisaintek.go.id&num=20"
+    # KUNCI: pakai site:.id untuk scan seluruh Indonesia
+    q_plus = urllib.parse.quote_plus(f'"{query}"') # pakai petik biar nama lengkap
+    url = f"https://www.google.com/search?q={q_plus}+site%3A.id&num=25"
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -25,23 +22,24 @@ def get_links_from_google(query):
             low = raw.lower()
             if any(k in low for k in NO_RESULT):
                 return []
-            # Google nyimpen link asli di /url?q=LINK_ASLI
+            # Ambil link asli dari Google
             links = re.findall(r'/url\?q=(https://[^&]+)', raw)
-            # Bersihin & decode
             clean_links = []
             for l in links:
                 l = urllib.parse.unquote(l)
-                # Filter cuma ambil yang media Indonesia
-                if any(d in l for d in [".ac.id","detik.com","kompas.com","cnnindonesia.com","tribunnews.com","antaranews.com","liputan6.com","pddikti","sinta","garuda"]):
-                    if "google.com" not in l and "support.google" not in l:
+                # Filter cuma .id biar beneran Indonesia
+                parsed = urllib.parse.urlparse(l)
+                if parsed.netloc.endswith(".id") or ".id/" in l:
+                    if "google.com" not in l and "support.google" not in l and "accounts.google" not in l:
                         clean_links.append(l)
             # Hilangin duplikat
-            return list(dict.fromkeys(clean_links))[:15] # ambil 15 teratas aja
-    except:
+            return list(dict.fromkeys(clean_links))[:20]
+    except Exception as e:
+        print(f"Google error: {e}")
         return []
 
 def cek_valid_url(url, query):
-    """Validasi apakah nama beneran ada di dalam halaman hasil Google itu"""
+    """Validasi apakah nama beneran ada di halaman itu"""
     try:
         qlow = query.lower().strip()
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -59,27 +57,26 @@ def cek_valid_url(url, query):
             if qlow not in clean:
                 return False
 
-            # SKOR VALIDASI
+            # SKOR
             score = 0
-            title_match = re.findall(r'<title[^>]*>(.*?)</title>', clean)
-            for t in title_match:
-                if qlow in t.lower():
-                    score += 100 # Paling valid kalau ada di title
+            if f"<title" in clean:
+                titles = re.findall(r'<title[^>]*>(.*?)</title>', clean)
+                for t in titles:
+                    if qlow in t.lower(): score += 100
 
-            h1h2h3 = re.findall(r'<h[1-3][^>]*>(.*?)</h[1-3]>', clean)
-            for h in h1h2h3:
+            headings = re.findall(r'<h[1-3][^>]*>(.*?)</h[1-3]>', clean)
+            for h in headings:
                 txt = re.sub(r'<.*?>',' ',h).lower()
-                if qlow in txt:
-                    score += 80
+                if qlow in txt: score += 80
 
             links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
             for a in links:
                 txt = re.sub(r'<.*?>',' ',a).lower()
-                if qlow in txt:
+                if qlow in txt and len(txt) > 8:
                     score += 50
                     break
             
-            return score >= 50 # Minimal harus ada di heading/link
+            return score >= 50
     except:
         return False
 
@@ -93,14 +90,12 @@ class handler(BaseHTTPRequestHandler):
         if not q or is_angka(q):
             self.wfile.write(b'{"results":[]}'); return
 
-        # 1. Tanya Google dulu: media mana aja yang nyebut nama ini?
         google_links = get_links_from_google(q)
 
         if not google_links:
-            self.wfile.write(json.dumps({"query": q, "results": [], "source": "google", "status": "NOT_FOUND_IN_GOOGLE"}, ensure_ascii=False).encode())
+            self.wfile.write(json.dumps({"query": q, "results": [], "source": "google.co.id", "status": "NOT_FOUND_IN_ALL_ID"}, ensure_ascii=False).encode())
             return
 
-        # 2. Validasi satu per satu link hasil Google
         valid = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
             futs = {ex.submit(cek_valid_url, url, q): url for url in google_links}
@@ -115,4 +110,4 @@ class handler(BaseHTTPRequestHandler):
                         "valid": True
                     })
 
-        self.wfile.write(json.dumps({"query": q, "results": valid, "google_found": len(google_links)}, ensure_ascii=False).encode())
+        self.wfile.write(json.dumps({"query": q, "results": valid, "google_found": len(google_links), "coverage": "ALL .id DOMAINS"}, ensure_ascii=False).encode())
