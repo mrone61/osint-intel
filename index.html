@@ -52,6 +52,18 @@ h1,h2{font-family:'Inter',sans-serif}
     <div id="status" class="text-[11px] md:text-[12px] text-zinc-400 font-mono text-center"></div>
   </div>
 
+  <!-- PROGRESS BAR TAMBAHAN - TIDAK UBAH TAMPILAN LAIN -->
+  <div id="progressWrap" class="hidden mt-6 max-w-3xl mx-auto">
+    <div class="flex justify-between text-[10px] font-mono text-zinc-500 mb-2">
+      <span id="progressText">0/120</span>
+      <span id="progressPercent">0%</span>
+    </div>
+    <div class="w-full bg-zinc-900 border border-zinc-800 rounded-full h-2 overflow-hidden">
+      <div id="progressBar" class="h-full bg-white transition-all duration-300" style="width:0%"></div>
+    </div>
+    <div id="progressDomain" class="text-[10px] text-zinc-600 font-mono mt-2 text-center truncate">-</div>
+  </div>
+
   <div class="flex gap-2 overflow-x-auto scrollbar-none justify-center mt-4 pb-2">
     <button onclick="filterCat('all')" id="f-all" class="filter-btn whitespace-nowrap bg-white text-black px-5 py-2.5 rounded-full text-[11px] font-bold transition">ALL</button>
     <button onclick="filterCat('news')" id="f-news" class="filter-btn whitespace-nowrap bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-5 py-2.5 rounded-full text-[11px] transition">NEWS</button>
@@ -135,28 +147,64 @@ async function doSearch(){
   btn.disabled = true;
   btnText.textContent = 'SCANNING...';
   document.getElementById('status').textContent = `Mengecek langsung ke server masing-masing untuk "${q}"...`;
-  document.getElementById('results').innerHTML = `
-    <div class="col-span-full flex flex-col items-center py-16 gap-4">
-      <div class="w-8 h-8 border-2 border-zinc-700 border-t-green-500 rounded-full animate-spin"></div>
-      <div class="text-zinc-500 text-xs font-mono animate-pulse">NEMBAK LANGSUNG KE 30+ SERVER...</div>
-    </div>`;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('progressWrap').classList.remove('hidden');
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('progressText').textContent = '0/120';
+  document.getElementById('progressPercent').textContent = '0%';
+  allData = [];
+  shown = 0;
   
   try{
+    // STEP 1: CEK PDDIKTI + DAPAT LIST 120 DOMAIN (cepat 2 detik)
     const res = await fetch(`/api?q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    allData = data.results || [];
-    shown = 0;
-    document.getElementById('results').innerHTML = '';
-    if(allData.length===0){
+    
+    if(data.pddikti_status === 'NOT_FOUND' || !data.domains || data.domains.length===0){
       document.getElementById('status').textContent = `Tidak ada server yang menyebut "${q}"`;
+      document.getElementById('progressWrap').classList.add('hidden');
       document.getElementById('results').innerHTML = `
         <div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl">
           <div class="text-zinc-500 text-sm">Tidak ada yang valid</div>
           <div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div>
         </div>`;
-    } else {
-      filterCat('all');
+      return;
     }
+
+    const domains = data.domains;
+    const total = domains.length;
+    document.getElementById('status').textContent = `PDDIKTI OK • Scan ${total} situs Sabang-Merauke...`;
+
+    // STEP 2: LOOP SATU-SATU BIAR ADA PROGRESS 1-2 DETIK (AMAN VERCEL 10 DETIK)
+    for(let i=0;i<domains.length;i++){
+      const d = domains[i];
+      const pct = Math.round(((i+1)/total)*100);
+      document.getElementById('progressText').textContent = `${i+1}/${total}`;
+      document.getElementById('progressPercent').textContent = `${pct}%`;
+      document.getElementById('progressBar').style.width = `${pct}%`;
+      document.getElementById('progressDomain').textContent = `Cek ${d}...`;
+
+      try{
+        const cek = await fetch(`/api?q=${encodeURIComponent(q)}&domain=${encodeURIComponent(d)}`).then(r=>r.json());
+        if(cek.valid){
+          allData.push({title: cek.title, url: cek.url, source: cek.domain});
+          // render langsung biar user lihat hasil sambil jalan
+          filterCat(currentCat);
+        }
+      }catch(e){}
+    }
+
+    document.getElementById('progressDomain').textContent = `Selesai ${total} situs`;
+    document.getElementById('status').innerHTML = `Scan selesai • Menampilkan <b class="text-green-400">${allData.length}</b> dari <b class="text-white">${total}</b> yang VALID`;
+
+    if(allData.length===0){
+      document.getElementById('results').innerHTML = `
+        <div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl">
+          <div class="text-zinc-500 text-sm">Tidak ada yang valid</div>
+          <div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div>
+        </div>`;
+    }
+
   }catch(e){
     document.getElementById('status').textContent = 'Error API: '+e.message;
   } finally {
