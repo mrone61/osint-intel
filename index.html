@@ -70,7 +70,7 @@ h1,h2{font-family:'Inter',sans-serif}
   <div class="text-center mt-16 border-t border-zinc-900 pt-8">
     <div class="text-[10px] text-zinc-700 font-mono">© Powered By. MR ONE</div>
     <a href="https://github.com/mrone61" target="_blank" rel="noopener" class="inline-flex items-center gap-2 mt-3 border border-zinc-800 hover:border-white bg-zinc-900/50 hover:bg-white text-zinc-400 hover:text-black px-5 py-2 rounded-full text-[10px] font-bold transition">
-      Follow github.com/mrone61
+      Follow: github.com/mrone61
     </a>
   </div>
 
@@ -115,14 +115,14 @@ function render(){
         <div class="text-[11px] text-zinc-500 break-all mt-3 line-clamp-2 font-mono bg-black/50 rounded-lg p-2 border border-zinc-900">${r.url}</div>
         <div class="flex items-center justify-center md:justify-start gap-2 mt-3">
           <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-          <span class="text-[10px] text-green-400 font-bold tracking-wide">DITEMUKAN • VALID HIJAU</span>
+          <span class="text-[10px] text-green-400 font-bold tracking-wide">DITEMUKAN • VALID</span>
         </div>
       </a>
     `;
   });
   shown += slice.length;
   document.getElementById('loadMoreWrap').style.display = shown < filtered.length ? 'block' : 'none';
-  document.getElementById('status').innerHTML = `Menampilkan <b class="text-green-400">${shown}</b> dari <b class="text-white">${filtered.length}</b> yang VALID HIJAU saja`;
+  document.getElementById('status').innerHTML = `Menampilkan <b class="text-green-400">${shown}</b> dari <b class="text-white">${filtered.length}</b> yang VALID`;
 }
 
 function loadMore(){ render(); }
@@ -138,7 +138,7 @@ async function doSearch(){
   document.getElementById('results').innerHTML = `
     <div class="col-span-full flex flex-col items-center py-16 gap-4">
       <div class="w-8 h-8 border-2 border-zinc-700 border-t-green-500 rounded-full animate-spin"></div>
-      <div class="text-zinc-500 text-xs font-mono animate-pulse">NEMBAK LANGSUNG KE 30+ SERVER... VALIDASI NAMA LENGKAP</div>
+      <div class="text-zinc-500 text-xs font-mono animate-pulse">NEMBAK LANGSUNG KE 30+ SERVER...</div>
     </div>`;
   
   try{
