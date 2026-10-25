@@ -25,147 +25,106 @@ TEMPLATES = {
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","no posts found","pencarian tidak ditemukan","berita tidak ditemukan","hasil tidak ditemukan","did not match any documents","sorry, but nothing matched","oops","belum ada artikel","tidak ada berita","no results matching"]
+NO_RESULT = [
+"tidak ditemukan","tidak ada hasil","data tidak ditemukan",
+"no results found","0 results","nothing found","no posts found",
+"pencarian tidak ditemukan","berita tidak ditemukan","tidak ada artikel",
+"tidak ada yang cocok","hasil tidak ditemukan","maaf, tidak ada"
+]
 
-def is_digits(q): return q.strip().isdigit()
+JEBAKAN_SEARCH = [
+"hasil pencarian untuk","search results for","search result for",
+"hasil cari","pencarian untuk","menampilkan hasil untuk"
+]
 
-def has_no_result(low):
-    for p in NO_RESULT:
-        if p in low: return True
-    return False
+def is_angka(q):
+    return q.strip().isdigit()
 
-def cek_sinta_real(query):
-    """Cek SINTA beneran ada author card, bukan cuma search box"""
-    if is_digits(query): return False
-    q_plus = urllib.parse.quote_plus(query)
-    try:
-        url = f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}"
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            raw = r.read().decode('utf-8','ignore')
-            low = raw.lower()
-            if has_no_result(low): return False
-            # SINTA kalau ada hasil pasti ada class ini
-            if 'profile-name' in low or 'au-name' in low or 'author-item' in low or 'sinta-profile' in low:
-                if query.lower() in low:
-                    return True
-            # Fallback lenient tapi aman: kalau ada minimal 2 kemunculan nama (bukan cuma di input)
-            clean = re.sub(r'<input[^>]*>', ' ', low)
-            clean = re.sub(r'<title.*?</title>',' ', clean, flags=re.DOTALL)
-            if clean.count(query.lower()) >= 2:
-                return True
-            # Kalau cuma 1 tapi ada di dalam <a> atau <h3>
-            links = re.findall(r'<a[^>]*>(.*?)</a>', low, flags=re.DOTALL)
-            for l in links:
-                txt = re.sub(r'<.*?>',' ',l).lower()
-                if query.lower() in txt and len(txt)>5:
-                    return True
-            return False
-    except:
+def cek_pddikti_gate(query):
+    """GERBANG UTAMA - Kalau ini FALSE, semua dianggap tidak valid"""
+    if is_angka(query):
         return False
-
-def cek_pddikti_real(query):
-    if is_digits(query): return False
     q_plus = urllib.parse.quote_plus(query)
+    # Coba 3 endpoint
     endpoints = [
         f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}",
         f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?keyword={q_plus}",
+        f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}", # backup kalau PDDIKTI diblokir Vercel
     ]
     for api_url in endpoints:
         try:
             req = urllib.request.Request(api_url, headers={
-                "User-Agent":"Mozilla/5.0",
-                "Referer":"https://pddikti.kemdiktisaintek.go.id/",
-                "Accept":"application/json"
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://pddikti.kemdiktisaintek.go.id/",
+                "Accept": "application/json, text/html, */*"
             })
-            with urllib.request.urlopen(req, timeout=8) as r:
-                raw = r.read().decode('utf-8','ignore')
+            with urllib.request.urlopen(req, timeout=10) as r:
+                raw = r.read().decode('utf-8', errors='ignore')
                 low = raw.lower()
-                if '"total":0' in low or '"data":[]' in low or len(raw)<80: continue
-                if query.lower() in low and ("nidn" in low or "nim" in low or "nama" in low):
+                if len(raw) < 50: continue
+                if '"total":0' in low or '"data":[]' in low: continue
+                if has_no_result_text(low): continue
+                if query.lower() in low:
                     return True
         except:
             continue
-    # === BYPASS: Kalau API PDDIKTI ke-block Vercel, cek SINTA. Dosen pasti ada di SINTA ===
-    if cek_sinta_real(query):
-        return True
     return False
 
-def cek_kampus_real(url, query, low):
-    """Kampus .ac.id valid kalau ada artikel/profil yang mengandung nama"""
-    if is_digits(query): return False
-    qlow = query.lower()
-    if has_no_result(low): return False
-    # Bersihkan header jebakan
-    clean = re.sub(r'search results for.*?<|hasil pencarian untuk.*?<', ' <', low)
-    clean = re.sub(r'<title.*?</title>',' ', clean, flags=re.DOTALL)
-    clean = re.sub(r'<input[^>]*>',' ', clean)
-    # Harus ada minimal di link/h2/h3 yang bukan header search
-    candidates = re.findall(r'<a[^>]*>(.*?)</a>|<h2[^>]*>(.*?)</h2>|<h3[^>]*>(.*?)</h3>|<article[^>]*>(.*?)</article>', clean, flags=re.DOTALL)
-    for groups in candidates:
-        for g in groups:
-            if not g: continue
-            txt = re.sub(r'<.*?>',' ',g).lower().strip()
-            if len(txt)<8: continue
-            if 'search' in txt or 'hasil pencarian' in txt: continue
-            if qlow in txt:
-                return True
-    # Fallback kedua: kalau ada di body 2x (bukan cuma 1x di header)
-    if clean.count(qlow) >= 2:
-        return True
+def has_no_result_text(low):
+    for k in NO_RESULT:
+        if k in low:
+            return True
     return False
 
 def cek_valid(url, query, domain):
-    qlow = query.lower()
-    if "pddikti" in domain:
-        return cek_pddikti_real(query)
-    if "sinta" in domain:
-        return cek_sinta_real(query)
-
     try:
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            raw = r.read().decode('utf-8','ignore')
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=7) as r:
+            raw = r.read().decode('utf-8', errors='ignore')
             low = raw.lower()
+            qlow = query.lower().strip()
 
-            if is_digits(query):
-                # Angka ngarang = auto invalid untuk semua kecuali google/wikipedia yang ketat
-                if "google.com" in domain or "wikipedia.org" in domain:
-                    # Google wiki angka masih mungkin valid kalau memang NIM? tapi kita block juga biar aman
-                    if has_no_result(low): return False
-                    # Harus ada entry-title
-                    entries = re.findall(r'<h2.*?</h2>|<h3.*?</h3>|class="entry-title"', low)
-                    if not entries: return False
-                    return False # angka tetap invalid
+            for k in NO_RESULT:
+                if k in low:
+                    return False
+
+            clean = re.sub(r'<input[^>]*>', ' ', low)
+            clean = re.sub(r'<title[^>]*>.*?</title>', ' ', clean)
+            clean = re.sub(r'<meta[^>]*>', ' ', clean)
+            clean = re.sub(r'<script.*?</script>', ' ', clean, flags=re.DOTALL)
+            clean = re.sub(r'<style.*?</style>', ' ', clean, flags=re.DOTALL)
+
+            for j in JEBAKAN_SEARCH:
+                clean = clean.replace(f"{j}: {qlow}", " ")
+                clean = clean.replace(f"{j} {qlow}", " ")
+                clean = clean.replace(f"{j}:", " ")
+                clean = clean.replace(j, " ")
+
+            clean = clean.replace(f'"{qlow}"', ' ')
+            clean = clean.replace(f"'{qlow}'", ' ')
+
+            if qlow not in clean:
                 return False
 
-            if "youtube.com" in domain:
-                titles = re.findall(r'"title":\{"runs":\[\{"text":"(.*?)"', low)
-                if not titles: titles = re.findall(r'"title":{"simpleText":"(.*?)"', low)
-                if not titles: return False
-                return any(qlow in t.lower() for t in titles[:10])
+            links = re.findall(r'<a[^>]*>(.*?)</a>', clean)
+            found_in_link = False
+            for link_text in links:
+                if qlow in link_text.lower():
+                    found_in_link = True
+                    break
+            
+            if domain.endswith('.ac.id') or any(x in domain for x in ['cnn','detik','kompas','tribun','sinta','garuda']):
+                if not found_in_link:
+                    headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', clean)
+                    for h in headings:
+                        if qlow in h.lower():
+                            found_in_link = True
+                            break
+                if not found_in_link:
+                    return False
 
-            if any(x in domain for x in ["cnnindonesia","tribunnews","detik","kompas"]):
-                if has_no_result(low): return False
-                hits = re.findall(r'<h3[^>]*>(.*?)</h3>|<h2[^>]*>(.*?)</h2>', low, flags=re.DOTALL)
-                for group in hits:
-                    for h in group:
-                        if not h: continue
-                        txt = re.sub(r'<.*?>',' ',h).lower()
-                        if qlow in txt and len(txt)>15:
-                            return True
-                return False
-
-            if domain.endswith('.ac.id') or 'garuda' in domain:
-                return cek_kampus_real(url, query, low)
-
-            # google & wikipedia
-            if has_no_result(low): return False
-            clean = re.sub(r'<input[^>]*>',' ', low)
-            clean = re.sub(r'<title.*?</title>',' ', clean, flags=re.DOTALL)
-            return qlow in clean
-
-    except Exception as e:
+            return True
+    except Exception:
         return False
 
 class handler(BaseHTTPRequestHandler):
@@ -177,16 +136,32 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         if not q:
             self.wfile.write(b'{"results":[]}'); return
+        
+        # === LOGIKA BARU SESUAI MAU LU ===
+        # 1. Cek PDDIKTI dulu sebagai gerbang
+        pddikti_ada = cek_pddikti_gate(q)
+        
+        if not pddikti_ada:
+            # Kalau tidak ada di PDDIKTI/SINTA, jangan tampilkan apapun
+            self.wfile.write(json.dumps({"query": q, "results": [], "pddikti_status": "NOT_FOUND"}, ensure_ascii=False).encode())
+            return
+
+        # 2. Kalau ada di PDDIKTI, baru cek semua domain lain
         q_plus = urllib.parse.quote_plus(q)
         q_path = urllib.parse.quote(q)
         valid = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
             futs = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
+                # PDDIKTI sudah pasti valid, tidak perlu cek lagi
+                if "pddikti" in domain:
+                    valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
+                    continue
                 futs[ex.submit(cek_valid, url, q, domain)] = (domain, url)
             for f in concurrent.futures.as_completed(futs):
                 domain, url = futs[f]
                 if f.result():
                     valid.append({"title": f"{q} di {domain}", "url": url, "source": domain, "valid": True})
-        self.wfile.write(json.dumps({"query": q, "results": valid}, ensure_ascii=False).encode())
+        
+        self.wfile.write(json.dumps({"query": q, "results": valid, "pddikti_status": "FOUND"}, ensure_ascii=False).encode())
