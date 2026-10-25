@@ -20,39 +20,31 @@ h1,h2{font-family:'Inter',sans-serif}
 
 <div class="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-8">
 
-  <!-- HEADER CENTERED PRO -->
   <div class="relative overflow-hidden border border-zinc-800 rounded-[24px] bg-gradient-to-b from-zinc-900/80 to-zinc-900/20 p-6 md:p-12 flex flex-col items-center justify-center text-center min-h-[52vh]">
     <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-green-500/10 blur-[120px] pointer-events-none"></div>
-    
     <div class="relative w-full flex flex-col items-center">
       <div class="inline-flex items-center gap-2 border border-zinc-800 bg-black rounded-full px-4 py-1.5 text-[9px] tracking-[0.2em] text-zinc-400">
-        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> LIVE VALIDATION ENGINE • 3.5s DELAY LEGAL
+        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> LIVE VALIDATION ENGINE 
       </div>
       <h1 class="text-4xl md:text-6xl font-black tracking-tighter mt-6">OSINT INTEL</h1>
       <p class="text-[11px] tracking-[0.4em] text-zinc-500 mt-2">OPEN SOURCE INTELLIGENCE • 150 SOURCES</p>
-      <!-- SEARCH BOX CENTERED -->
       <div class="flex flex-col md:flex-row gap-3 mt-10 w-full max-w-3xl mx-auto justify-center">
         <div class="flex-1 relative">
-          <input id="q" value="" 
-            class="w-full bg-black border border-zinc-700 rounded-2xl px-6 py-4 text-[14px] text-center md:text-left outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition placeholder:text-zinc-600" 
-            placeholder="Ketik apapun... Nama, Peristiwa, Lokasi, 26 Oktober 2026...">
+          <input id="q" value="" class="w-full bg-black border border-zinc-700 rounded-2xl px-6 py-4 text-[14px] text-center md:text-left outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition placeholder:text-zinc-600" placeholder="Ketik apapun... Nama, Peristiwa, Lokasi, dll...">
         </div>
-        <button onclick="doSearch()" id="btn" 
-          class="bg-white text-black font-black px-10 py-4 rounded-2xl text-sm tracking-wide hover:bg-zinc-200 active:scale-[0.98] transition flex items-center justify-center gap-2 shrink-0 mx-auto md:mx-0 w-full md:w-auto">
+        <button onclick="doSearch()" id="btn" class="bg-white text-black font-black px-10 py-4 rounded-2xl text-sm tracking-wide hover:bg-zinc-200 active:scale-[0.98] transition flex items-center justify-center gap-2 shrink-0 mx-auto md:mx-0 w-full md:w-auto">
           <span id="btnText">CARI</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </button>
       </div>
-      <p class="text-[10px] text-zinc-600 mt-4">Tekan Enter untuk scan • Jeda 3.5 detik aman hukum</p>
+      <p class="text-[10px] text-zinc-600 mt-4">Tekan Enter untuk scan</p>
     </div>
   </div>
 
-  <!-- FILTER BAR CENTERED -->
   <div class="flex flex-col md:flex-row gap-3 md:items-center justify-center mt-8 py-3 border-y border-zinc-900/50">
     <div id="status" class="text-[11px] md:text-[12px] text-zinc-400 font-mono text-center"></div>
   </div>
 
-  <!-- PROGRESS BAR TAMBAHAN - TIDAK UBAH TAMPILAN LAIN -->
   <div id="progressWrap" class="hidden mt-6 max-w-3xl mx-auto">
     <div class="flex justify-between text-[10px] font-mono text-zinc-500 mb-2">
       <span id="progressText">0/0</span>
@@ -73,7 +65,6 @@ h1,h2{font-family:'Inter',sans-serif}
     <button onclick="filterCat('pdf')" id="f-pdf" class="filter-btn whitespace-nowrap bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-5 py-2.5 rounded-full text-[11px] transition">DOCS</button>
   </div>
 
-  <!-- RESULTS GRID -->
   <div id="results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-8"></div>
   
   <div id="loadMoreWrap" class="text-center mt-10 hidden">
@@ -81,10 +72,23 @@ h1,h2{font-family:'Inter',sans-serif}
   </div>
   
   <div class="text-center mt-16 border-t border-zinc-900 pt-8">
-    <div class="text-[10px] text-zinc-700 font-mono">© Powered By. MR ONE • 150 Sources • 3.5s Legal Delay</div>
-    <a href="https://github.com/mrone61" target="_blank" rel="noopener" class="inline-flex items-center gap-2 mt-3 border border-zinc-800 hover:border-white bg-zinc-900/50 hover:bg-white text-zinc-400 hover:text-black px-5 py-2 rounded-full text-[10px] font-bold transition">
-      Follow: github.com/mrone61
-    </a>
+    <div class="text-[10px] text-zinc-700 font-mono">© Powered By. MR ONE</div>
+    <div class="flex flex-col md:flex-row items-center justify-center gap-3 mt-5">
+      
+      <!-- GITHUB LOGO -->
+      <a href="https://github.com/mrone61" target="_blank" rel="noopener" class="group inline-flex items-center gap-2.5 border border-zinc-800 hover:border-white bg-zinc-900/50 hover:bg-white text-zinc-300 hover:text-black px-6 py-3 rounded-full text-[11px] font-bold transition-all">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.207 11.387.6.11.793-.26.793-.577v-2.02c-3.338.726-4.033-1.415-4.033-1.415-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.42-1.305.763-1.605-2.665-.304-5.466-1.332-5.466-5.93 0-1.31.468-2.38 1.235-3.22-.124-.304-.535-1.524.117-3.176 0 0 1.008-.323 3.3 1.23.96-.267 1.99-.4 3.015-.405 1.024.005 2.055.138 3.015.405 2.29-1.553 3.297-1.23 3.297-1.23.653 1.652.242 2.872.118 3.176.77.84 1.233 1.91 1.233 3.22 0 4.61-2.804 5.624-5.476 5.921.43.372.815 1.103.815 2.222v3.293c0 .32.192.694.8.576C20.566 21.796 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        github.com/mrone61
+      </a>
+
+      <!-- WHATSAPP LOGO -->
+      <a href="https://wa.me/628133244757" target="_blank" rel="noopener" class="group inline-flex items-center gap-2.5 border border-green-900 hover:border-[#25D366] bg-[#0f1a12] hover:bg-[#25D366] text-[#25D366] hover:text-black px-6 py-3 rounded-full text-[11px] font-bold transition-all">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.11 17.205c-.372 1.05-2.1 1.944-2.9 2.07-.713.113-1.638.162-2.645-.167-.75-.244-1.713-.55-2.94-1.078-5.163-2.207-8.523-7.356-8.79-7.69-.27-.335-2.17-2.89-2.17-5.517 0-2.626 1.38-3.92 1.87-4.455.49-.537 1.07-.67 1.43-.67.36 0 .72.01 1.04.02.33.01.78-.123 1.22.935.44 1.058 1.5 3.667 1.63 3.933.13.266.22.577.02.933-.2.356-.3.577-.6.89-.3.312-.63.7-.9.943-.27.244-.55.51-.24 1 .31.49 1.38 2.277 2.96 3.59 2.03 1.69 3.745 2.213 4.275 2.46.53.248.84.208 1.15-.124.31-.332 1.32-1.537 1.67-2.065.35-.53.7-.44 1.18-.266.48.174 3.03 1.43 3.55 1.69.52.26.87.39.99.61.13.22.13 1.28-.24 2.33zM12.04 2.004c-5.518 0-10.001 4.483-10.001 10.001 0 1.762.453 3.49 1.313 5.01L2 22l5.11-1.34c1.47.8 3.13 1.22 4.93 1.22 5.518 0 10.001-4.483 10.001-10.001S17.558 2.004 12.04 2.004z"/></svg>
+        Chat WA: 0813-3244-757
+      </a>
+
+    </div>
+    <div class="text-[9px] text-zinc-600 font-mono mt-4">Hanya untuk riset publik • Jeda 3.5s legal • Fair use</div>
   </div>
 
 </div>
@@ -162,18 +166,13 @@ async function doSearch(){
   shown = 0;
   
   try{
-    // STEP 1: DAPAT LIST 150 DOMAIN
     const res = await fetch(`/api?q=${encodeURIComponent(q)}`);
     const data = await res.json();
     
     if(data.pddikti_status === 'NOT_FOUND' || !data.domains || data.domains.length===0){
       document.getElementById('status').textContent = `Tidak ada server yang menyebut "${q}"`;
       document.getElementById('progressWrap').classList.add('hidden');
-      document.getElementById('results').innerHTML = `
-        <div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl">
-          <div class="text-zinc-500 text-sm">Tidak ada yang valid</div>
-          <div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div>
-        </div>`;
+      document.getElementById('results').innerHTML = `<div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl"><div class="text-zinc-500 text-sm">Tidak ada yang valid</div><div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div></div>`;
       return;
     }
 
@@ -182,7 +181,6 @@ async function doSearch(){
     document.getElementById('progressText').textContent = `0/${total}`;
     document.getElementById('status').textContent = `PDDIKTI OK • Scan ${total} situs Sabang-Merauke (BMKG/BPS/TNI/Polri)...`;
 
-    // STEP 2: LOOP SATU-SATU - JEDA 3.5 DETIK DI BACKEND
     for(let i=0;i<domains.length;i++){
       const d = domains[i];
       const pct = Math.round(((i+1)/total)*100);
@@ -190,12 +188,10 @@ async function doSearch(){
       document.getElementById('progressPercent').textContent = `${pct}%`;
       document.getElementById('progressBar').style.width = `${pct}%`;
       document.getElementById('progressDomain').textContent = `Cek ${d}... (jeda 3.5s legal)`;
-
       try{
         const cek = await fetch(`/api?q=${encodeURIComponent(q)}&domain=${encodeURIComponent(d)}`).then(r=>r.json());
         if(cek.valid){
           allData.push({title: cek.title, url: cek.url, source: cek.domain});
-          // render langsung
           filterCat(currentCat);
         }
       }catch(e){}
@@ -203,15 +199,9 @@ async function doSearch(){
 
     document.getElementById('progressDomain').textContent = `Selesai ${total} situs • ${allData.length} VALID`;
     document.getElementById('status').innerHTML = `Scan selesai • Menampilkan <b class="text-green-400">${allData.length}</b> dari <b class="text-white">${total}</b> yang VALID`;
-
     if(allData.length===0){
-      document.getElementById('results').innerHTML = `
-        <div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl">
-          <div class="text-zinc-500 text-sm">Tidak ada yang valid</div>
-          <div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div>
-        </div>`;
+      document.getElementById('results').innerHTML = `<div class="col-span-full text-center py-16 border border-dashed border-zinc-800 rounded-2xl"><div class="text-zinc-500 text-sm">Tidak ada yang valid</div><div class="text-zinc-600 text-xs mt-1 font-mono">Nama tidak ditemukan di server manapun dengan validasi ketat</div></div>`;
     }
-
   }catch(e){
     document.getElementById('status').textContent = 'Error API: '+e.message;
   } finally {
