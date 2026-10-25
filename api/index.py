@@ -25,127 +25,139 @@ TEMPLATES = {
 "wikipedia.org": "https://en.wikipedia.org/w/index.php?search={q_plus}",
 }
 
-NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","no posts found","pencarian tidak ditemukan","berita tidak ditemukan","hasil tidak ditemukan","did not match any documents","sorry, but nothing matched","oops","artikel tidak ditemukan","belum ada artikel","tidak ada berita"]
+NO_RESULT = ["tidak ditemukan","tidak ada hasil","data tidak ditemukan","no results found","nothing found","no posts found","pencarian tidak ditemukan","berita tidak ditemukan","hasil tidak ditemukan","did not match any documents","sorry, but nothing matched","oops","belum ada artikel","tidak ada berita","your search did not match","tidak ada yang ditemukan","no results matching"]
 
-def is_angka_ngarang(q):
-    q = q.strip()
-    # Kalau cuma angka atau 1 kata pendek = anggap ngarang
-    if q.isdigit(): return True
-    if len(q.split()) == 1 and len(q) < 15: 
-        # bisa jadi NIM, tapi kita cek ketat nanti
-        return False
+def is_all_digits(q):
+    return q.strip().isdigit()
+
+def has_no_result_text(low):
+    for p in NO_RESULT:
+        if p in low:
+            return True
     return False
 
-def cek_pddikti_fix(query):
+def cek_pddikti_real(query):
+    """PDDIKTI hanya valid kalau API beneran balikin data mahasiswa/dosen"""
     q_plus = urllib.parse.quote_plus(query)
-    q_lower = query.lower()
-    # 5 endpoint yang dipakai frontend PDDIKTI terbaru
-    urls = [
+    # Kalau angka semua, langsung invalid di PDDIKTI
+    if is_all_digits(query):
+        return False
+    
+    endpoints = [
         f"https://pddikti.kemdiktisaintek.go.id/api/search/mahasiswa?keyword={q_plus}",
         f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?keyword={q_plus}",
-        f"https://pddikti.kemdiktisaintek.go.id/api/search/dosen?nama={q_plus}",
-        f"https://api-frontend.kemdikbud.go.id/search_mhs/{q_plus}",
-        f"https://api-frontend.kemdikbud.go.id/search_dosen/{q_plus}",
-        f"https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}", # BACKUP: dosen pasti ada di SINTA
     ]
-    for api_url in urls:
+    for api_url in endpoints:
         try:
             req = urllib.request.Request(api_url, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "User-Agent": "Mozilla/5.0",
                 "Referer": "https://pddikti.kemdiktisaintek.go.id/",
-                "Accept": "application/json, text/html, */*"
+                "Accept": "application/json"
             })
-            with urllib.request.urlopen(req, timeout=10) as r:
-                raw = r.read().decode('utf-8', errors='ignore')
+            with urllib.request.urlopen(req, timeout=8) as r:
+                raw = r.read().decode('utf-8','ignore')
                 low = raw.lower()
-                if len(raw) < 40: continue
-                if '"total":0' in low or '"data":[]' in low or '"count":0' in low: 
+                if '"total":0' in low or '"data":[]' in low or len(raw)<80:
                     continue
-                # Kalau nama ada di response
-                if q_lower in low:
-                    # Pastikan bukan cuma echo keyword kosong
-                    if "mahasiswa" in low or "dosen" in low or "author" in low or "nidn" in low or "ptk" in low or "sinta" in low:
-                        return True
+                # Harus ada field spesifik dosen/mhs dan nama query di dalamnya
+                if query.lower() in low and ("nidn" in low or "nim" in low or "nama" in low or "pt" in low):
+                    return True
         except:
             continue
     return False
 
 def cek_valid(url, query, domain):
     qlow = query.lower().strip()
-    if "pddikti" in domain:
-        return cek_pddikti_fix(query)
+    # RULE 1: Angka ngarang auto invalid di PDDIKTI, berita, youtube
+    if is_all_digits(query):
+        if any(x in domain for x in ["pddikti","cnnindonesia","tribunnews","detik","kompas","youtube","sinta","garuda"]):
+            return False
+        # untuk .ac.id dan google, lanjut tapi harus super ketat
 
-    # Angka ngarang harus super ketat
-    is_random_number = query.strip().isdigit()
+    if "pddikti" in domain:
+        return cek_pddikti_real(query)
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
-            raw = r.read().decode('utf-8', errors='ignore')
+            raw = r.read().decode('utf-8','ignore')
             low = raw.lower()
 
-            # 1. Cek frasa gagal
-            for p in NO_RESULT:
-                if p in low:
-                    # Untuk berita, kalau ada frasa gagal = langsung invalid
-                    if any(x in domain for x in ["cnnindonesia","tribunnews","detik","kompas"]):
-                        # tapi cek dulu apakah ada artikel real yang mengandung query
-                        arts = re.findall(r'<h3.*?</h3>|<h2.*?</h2>|<article.*?</article>', low, flags=re.DOTALL)
-                        real = False
-                        for a in arts:
-                            clean = re.sub(r'<.*?>',' ',a).lower()
-                            if qlow in clean and 'search' not in clean and 'pencarian' not in clean and len(clean)>20:
-                                real = True
-                                break
-                        if not real:
-                            return False
-
-            # 2. Bersihkan jebakan header search
-            cleaned = re.sub(r'search results for.*?<|hasil pencarian untuk.*?<', ' <', low)
-            cleaned = re.sub(r'<title.*?</title>', ' ', cleaned, flags=re.DOTALL)
-            cleaned = re.sub(r'<input[^>]*>', ' ', cleaned)
-
-            if qlow not in cleaned:
+            # RULE 2: Kalau ada teks no result = langsung INVALID
+            if has_no_result_text(low):
                 return False
 
-            # 3. YOUTUBE - harus ada di judul video
+            # RULE 3: Bersihkan search header yang nipu
+            clean_low = re.sub(r'<title.*?</title>', ' ', low, flags=re.DOTALL)
+            clean_low = re.sub(r'<input[^>]*>', ' ', clean_low)
+
+            # YOUTUBE
             if "youtube.com" in domain:
-                if is_random_number: return False
+                if is_all_digits(query): return False
                 titles = re.findall(r'"title":\{"runs":\[\{"text":"(.*?)"', low)
-                if not titles:
-                    titles = re.findall(r'"title":{"simpleText":"(.*?)"', low)
+                if not titles: titles = re.findall(r'"title":{"simpleText":"(.*?)"', low)
                 if not titles: return False
-                for t in titles[:15]:
-                    if qlow in t.lower():
-                        return True
-                return False
+                return any(qlow in t.lower() for t in titles[:10])
 
-            # 4. BERITA - harus ada di judul berita
+            # BERITA
             if any(x in domain for x in ["cnnindonesia","tribunnews","detik","kompas"]):
-                if is_random_number: return False # angka ngarang auto invalid di berita
-                # cari judul
-                hits = re.findall(r'<h3[^>]*>(.*?)</h3>|<h2[^>]*>(.*?)</h2>|<article[^>]*>(.*?)</article>', low, flags=re.DOTALL)
-                for group in hits:
-                    for h in group:
-                        if not h: continue
-                        clean = re.sub(r'<.*?>',' ',h).lower()
-                        if qlow in clean and len(clean)>15 and 'search' not in clean:
+                if is_all_digits(query): return False
+                articles = re.findall(r'<h3[^>]*>(.*?)</h3>|<h2[^>]*>(.*?)</h2>', low, flags=re.DOTALL)
+                for art in articles:
+                    for a in art:
+                        if not a: continue
+                        txt = re.sub(r'<.*?>',' ',a).lower().strip()
+                        if qlow in txt and len(txt)>15 and 'search' not in txt and 'hasil' not in txt:
                             return True
                 return False
 
-            # 5. KAMPUS & SINTA & GARUDA - ini yang bikin dosen muncul
-            # Untuk dosen, cukup ada di halaman (bukan cuma di header)
-            if domain.endswith('.ac.id') or 'sinta' in domain or 'garuda' in domain:
-                # hitung kemunculan setelah header dihapus
-                count = cleaned.count(qlow)
-                if count >= 1:
-                    return True
+            # SINTA & GARUDA - harus ada author card
+            if "sinta" in domain:
+                if is_all_digits(query): return False
+                # SINTA punya class profile name
+                cards = re.findall(r'<div class=".*?au-name.*?>(.*?)</div>|<a class=".*?author-name.*?>(.*?)</a>|<h3.*?</h3>', low, flags=re.DOTALL)
+                for c in cards:
+                    for part in c:
+                        if not part: continue
+                        txt = re.sub(r'<.*?>',' ',part).lower()
+                        if qlow in txt:
+                            return True
                 return False
 
-            # 6. GOOGLE & WIKIPEDIA
-            return qlow in cleaned
+            if "garuda" in domain:
+                if is_all_digits(query): return False
+                titles = re.findall(r'<h3.*?</h3>|<h2.*?</h2>', low, flags=re.DOTALL)
+                for t in titles:
+                    txt = re.sub(r'<.*?>',' ',t).lower()
+                    if qlow in txt:
+                        return True
+                return False
 
-    except Exception:
+            # .AC.ID, GOOGLE, WIKIPEDIA
+            # Harus ada entry-title / result-title yang mengandung query, bukan cuma di body
+            entry_patterns = re.findall(
+                r'class="[^"]*entry-title[^"]*"[^>]*>(.*?)</|class="[^"]*result-title[^"]*"[^>]*>(.*?)</|<article[^>]*>.*?<h[2-3][^>]*>(.*?)</h[2-3]>|<h2[^>]*>(.*?)</h2>|<h3[^>]*>(.*?)</h3>',
+                low, flags=re.DOTALL
+            )
+            if not entry_patterns:
+                return False # Tidak ada hasil sama sekali
+            
+            found = False
+            for groups in entry_patterns:
+                for g in groups:
+                    if not g: continue
+                    txt = re.sub(r'<.*?>',' ',g).lower().strip()
+                    if not txt: continue
+                    if 'search results for' in txt or 'hasil pencarian' in txt:
+                        continue
+                    if qlow in txt and len(txt) > 8:
+                        found = True
+                        break
+                if found: break
+            
+            return found
+
+    except:
         return False
 
 class handler(BaseHTTPRequestHandler):
@@ -160,7 +172,7 @@ class handler(BaseHTTPRequestHandler):
         q_plus = urllib.parse.quote_plus(q)
         q_path = urllib.parse.quote(q)
         valid = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
             futs = {}
             for domain, tpl in TEMPLATES.items():
                 url = tpl.replace("{q_plus}", q_plus).replace("{q_path}", q_path)
