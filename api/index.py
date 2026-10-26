@@ -2,7 +2,6 @@ from http.server import BaseHTTPRequestHandler
 import urllib.parse, json, urllib.request, re, time, random
 
 TEMPLATES = {
-# === MEDIA NASIONAL (40) ===
 "detik.com": "https://www.detik.com/search/searchall?query={q_plus}",
 "kompas.com": "https://www.kompas.com/search?q={q_plus}",
 "kompasiana.com": "https://www.kompasiana.com/search?q={q_plus}",
@@ -44,7 +43,6 @@ TEMPLATES = {
 "wartaekonomi.co.id": "https://www.wartaekonomi.co.id/search?q={q_plus}",
 "era.id": "https://www.era.id/search?q={q_plus}",
 
-# === TRIBUN REGIONAL (29) ===
 "aceh.tribunnews.com": "https://aceh.tribunnews.com/search?q={q_plus}",
 "medan.tribunnews.com": "https://medan.tribunnews.com/search?q={q_plus}",
 "batam.tribunnews.com": "https://batam.tribunnews.com/search?q={q_plus}",
@@ -75,7 +73,6 @@ TEMPLATES = {
 "papua.tribunnews.com": "https://papua.tribunnews.com/search?q={q_plus}",
 "sorong.tribunnews.com": "https://sorong.tribunnews.com/search?q={q_plus}",
 
-# === JAWA POS GROUP + SULUT ===
 "radar-bali.jawapos.com": "https://radar-bali.jawapos.com/search?q={q_plus}",
 "radarjogja.jawapos.com": "https://radarjogja.jawapos.com/search?q={q_plus}",
 "radarsolo.jawapos.com": "https://radarsolo.jawapos.com/search?q={q_plus}",
@@ -93,7 +90,6 @@ TEMPLATES = {
 "fajar.co.id": "https://www.fajar.co.id/search?q={q_plus}",
 "lintas-sulut.com": "https://www.lintas-sulut.com/search?q={q_plus}",
 
-# === ANTARA REGIONAL (30) ===
 "aceh.antaranews.com": "https://aceh.antaranews.com/search?q={q_plus}",
 "sumut.antaranews.com": "https://sumut.antaranews.com/search?q={q_plus}",
 "riau.antaranews.com": "https://riau.antaranews.com/search?q={q_plus}",
@@ -125,7 +121,6 @@ TEMPLATES = {
 "kaltara.antaranews.com": "https://kaltara.antaranews.com/search?q={q_plus}",
 "malut.antaranews.com": "https://malut.antaranews.com/search?q={q_plus}",
 
-# === PEMERINTAH + MILITER + KEUANGAN + BMKG + BENCANA ===
 "bmkg.go.id": "https://www.bmkg.go.id/search?q={q_plus}",
 "bnpb.go.id": "https://bnpb.go.id/search?q={q_plus}",
 "basarnas.go.id": "https://www.basarnas.go.id/search?q={q_plus}",
@@ -146,7 +141,6 @@ TEMPLATES = {
 "kemhan.go.id": "https://www.kemhan.go.id/?s={q_plus}",
 "indonesia.go.id": "https://www.indonesia.go.id/search?q={q_plus}",
 
-# === AKADEMIK + GLOBAL ===
 "pddikti.kemdiktisaintek.go.id": "https://pddikti.kemdiktisaintek.go.id/search/{q_path}",
 "sinta.kemdiktisaintek.go.id": "https://sinta.kemdiktisaintek.go.id/authors?q={q_plus}",
 "garuda.kemdikbud.go.id": "https://garuda.kemdikbud.go.id/documents?q={q_plus}",
@@ -160,7 +154,6 @@ def cek_pddikti_gate(query):
     return True
 
 def cek_satu_situs(domain, query):
-    # JEDA 3.5 DETIK - LEGAL & SOPAN 100% - ANTI BLOKIR
     time.sleep(random.uniform(3.0, 4.0))
     if domain not in TEMPLATES: return False, ""
     tpl = TEMPLATES[domain]
@@ -171,52 +164,40 @@ def cek_satu_situs(domain, query):
             html = r.read().decode('utf-8','ignore')
             raw_low = html.lower()
 
-            # LAPIS 1: CEK KATA TIDAK DITEMUKAN
             if any(k in raw_low for k in NO_RESULT):
                 return False, url
             
-            # LAPIS 2: BUANG FOOTER, SCRIPT, COPYRIGHT YANG BIKIN FALSE POSITIVE
-            # Ini kunci biar © 2026 di footer gak kehitung VALID
             clean = re.sub(r'<script.*?</script>|<style.*?</style>|<footer.*?</footer>|©.*?20\d\d|copyright.*?</div>|all rights reserved', ' ', html, flags=re.I|re.S)
             clean_low = clean.lower()
 
-            # LAPIS 3: HARUS ADA CONTAINER BERITA / HASIL
             has_result_container = bool(re.search(r'<article|<h2|<h3|class=".*(title|result|list|item|berita|news|card).*?"', clean_low))
-            # Kalau halaman terlalu pendek dan gak ada container, anggap kosong
             if not has_result_container and len(clean_low) < 6000 and "search" in raw_low:
-                # Double check, kalau gak ada kata query sama sekali ya false
                 if query.lower() not in clean_low:
                     return False, url
 
-            # LAPIS 4: VALIDASI KATA BERDEKATAN (ANTI MENCAR)
             query_lower = query.lower()
             parts = [p for p in query_lower.split() if len(p) > 2]
             
             if len(parts) == 0:
                 return False, url
 
-            # Query 1 kata harus muncul minimal 2x di konten bersih
             if len(parts) == 1:
                 if clean_low.count(parts[0]) >= 2:
                     return True, url
-                # Kalau cuma 1x tapi ada di judul, tetap valid
                 if re.search(r'<h[2-3][^>]*>.*?' + re.escape(parts[0]), clean_low):
                     return True, url
                 return False, url
-
-            # Query multi kata: cek apakah kata-kata berdekatan dalam 150 karakter
-            # Contoh: "Rudi Manado" -> harus ada "Rudi ....(max 150 char)... Manado"
+                
             found_near = 0
             for i in range(len(parts)-1):
                 pattern = re.escape(parts[i]) + r".{0,150}?" + re.escape(parts[i+1])
                 if re.search(pattern, clean_low):
                     found_near += 1
-                # Cek balik juga Manado...Rudi
+        
                 pattern_rev = re.escape(parts[i+1]) + r".{0,150}?" + re.escape(parts[i])
                 if re.search(pattern_rev, clean_low):
                     found_near += 1
 
-            # Jika query mengandung tanggal lengkap "26 Oktober 2026"
             if re.search(r'\d{1,2}\s+\w+\s+20\d{2}', query_lower):
                 if query_lower in clean_low:
                     return True, url
@@ -224,7 +205,6 @@ def cek_satu_situs(domain, query):
                     return True, url
                 return False, url
 
-            # Final decision
             if query_lower in clean_low:
                 return True, url
             if len(parts) == 2 and found_near >= 1:
